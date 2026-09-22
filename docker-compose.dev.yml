@@ -1,0 +1,44 @@
+# Dev overlay: hot-reload for all three app services, source bind-mounted
+# instead of baked into the image. Layer this on top of the base file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# Targets the `builder`/`deps` build stages (which have dependencies
+# installed but haven't run a production build yet) rather than the full
+# multi-stage image — see each service's Dockerfile.
+
+services:
+  api:
+    build:
+      target: builder
+    volumes:
+      - ./services/api:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      DEBUG: "true"
+
+  dashboard:
+    build:
+      dockerfile: apps/dashboard/Dockerfile
+      target: deps
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/dashboard/.next
+    working_dir: /app
+    command: pnpm --filter=@zello-ai/dashboard dev
+    environment:
+      WATCHPACK_POLLING: "true" # reliable file-change detection in Docker Desktop bind mounts
+
+  admin:
+    build:
+      dockerfile: apps/admin/Dockerfile
+      target: deps
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/admin/.next
+    working_dir: /app
+    command: pnpm --filter=@zello-ai/admin dev
+    environment:
+      WATCHPACK_POLLING: "true"

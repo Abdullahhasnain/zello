@@ -1,0 +1,120 @@
+# Local/integration stack for the whole platform. Mirrors the architecture
+# doc's infra section at small scale — one Postgres, one Redis, the API,
+# and both Next.js apps. Production runs the same images on ECS/Fargate
+# behind RDS + ElastiCache, not this file — see docs/architecture's
+# Infrastructure & deployment section.
+#
+# Quickstart:
+#   cp services/api/.env.example services/api/.env
+#   cp apps/dashboard/.env.example apps/dashboard/.env
+#   cp apps/admin/.env.example apps/admin/.env
+#   docker compose up --build
+#
+# The `migrate` service runs once and exits (extensions -> alembic ->
+# RLS/seed, see db/ddl/README.md's Option B) before `api` is allowed to
+# start — see the `depends_on: condition: service_completed_successfully`
+# below.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:-zello_superuser}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:-zello_superuser}
+      POSTGRES_DB: zello_ai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER:-zello_superuser} -d zello_ai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # The image only bakes in services/api's own contents — these two
+      # mounts add the repo-root-level pieces migrate.py needs, at the
+      # relative paths it expects (see infra/scripts/migrate.py's DDL_DIR).
+      - ./infra/scripts:/app/infra/scripts:ro
+      - ./db:/app/db:ro
+    environment:
+      # Superuser connection: this step creates the zello_admin/zello_app
+      # roles themselves (003_row_level_security.sql), so it can't yet
+      # connect as either — see db/ddl/003_row_level_security.sql.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_SUPERUSER:-zello_superuser}:${POSTGRES_SUPERUSER_PASSWORD:-zello_superuser}@postgres:5432/zello_ai
+      DATABASE_URL_APP: postgresql+asyncpg://zello_app:zello_app@postgres:5432/zello_ai
+      REDIS_URL: redis://redis:6379/0
+      CLERK_JWKS_URL: https://placeholder.clerk.accounts.dev/.well-known/jwks.json
+      CLERK_ISSUER: https://placeholder.clerk.accounts.dev
+      CUSTOMER_JWT_SECRET: local-dev-only-secret
+      PARTNER_API_HMAC_SECRET: local-dev-only-secret
+      INTERNAL_SERVICE_TOKEN: local-dev-only-secret
+      # Never actually called during migration — just needs to be present
+      # so Settings() (a required field) doesn't fail to load. The real
+      # key lives in services/api/.env for the `api` service below.
+      OPENAI_API_KEY: sk-not-used-during-migration
+    entrypoint: ["python", "/app/infra/scripts/migrate.py"]
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    env_file: ./services/api/.env
+    environment:
+      # Overrides .env's localhost defaults with in-network hostnames —
+      # everything else (Clerk keys, JWT secrets) comes from the env_file.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_SUPERUSER:-zello_superuser}:${POSTGRES_SUPERUSER_PASSWORD:-zello_superuser}@postgres:5432/zello_ai
+      DATABASE_URL_APP: postgresql+asyncpg://zello_app:zello_app@postgres:5432/zello_ai
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: apps/dashboard/Dockerfile
+    depends_on:
+      - api
+    env_file: ./apps/dashboard/.env
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+    ports:
+      - "3000:3000"
+
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+    depends_on:
+      - api
+    env_file: ./apps/admin/.env
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+    ports:
+      - "3001:3001"
+
+volumes:
+  pgdata:

@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Light theme (default) — same palette as the product's own brand
+     artifacts: copper accent for "voice energy", deep teal for the AI/tech
+     signal. See docs/architecture for the pitch-deck-derived identity. */
+  --color-bg: #fbfbfa;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f4f3f1;
+  --color-border: #e4e2dd;
+  --color-ink: #1e2130;
+  --color-ink-soft: #5b5e6c;
+  --color-ink-faint: #8b8e9c;
+  --color-accent: #b6602a;
+  --color-accent-ink: #7a3f1b;
+  --color-accent-soft: #f5e3d3;
+  --color-accent2: #2b6e62;
+  --color-accent2-soft: #dcebe7;
+  --color-success: #2e7d4f;
+  --color-warning: #b5860a;
+  --color-danger: #b1402e;
+  --color-danger-soft: #f7ded9;
+
+  --font-display: Cambria, Georgia, "Times New Roman", serif;
+  --font-body: "Segoe UI", Roboto, -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+}
+
+.dark {
+  --color-bg: #121319;
+  --color-surface: #1a1c25;
+  --color-surface-hover: #22242f;
+  --color-border: #2e3140;
+  --color-ink: #edeeea;
+  --color-ink-soft: #a6a9b8;
+  --color-ink-faint: #767a8a;
+  --color-accent: #e08a4b;
+  --color-accent-ink: #f2c89a;
+  --color-accent-soft: #3a2a1e;
+  --color-accent2: #4fa394;
+  --color-accent2-soft: #1c2e2a;
+  --color-success: #5fbf83;
+  --color-warning: #d8ac4e;
+  --color-danger: #e27c68;
+  --color-danger-soft: #3a2320;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-body);
+}
+
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-accent-ink);
+}
+
+/* Scrollbars themed to match, rather than the browser default — small
+   detail, but a jarring native scrollbar is the fastest way to make a dark
+   theme look unfinished. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-faint);
+}

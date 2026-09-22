@@ -1,0 +1,72 @@
+[tool.poetry]
+name = "zello-ai-api"
+version = "0.1.0"
+description = "Zello AI backend — multi-tenant conversational commerce API (FastAPI, Clean Architecture)."
+authors = ["Zello AI"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.115.0"
+uvicorn = { extras = ["standard"], version = "^0.31.0" }
+pydantic = "^2.9.2"
+pydantic-settings = "^2.5.2"
+sqlalchemy = "^2.0.35"
+asyncpg = "^0.31.0"
+alembic = "^1.13.3"
+pgvector = "^0.3.4"
+redis = "^5.1.0"
+python-jose = { extras = ["cryptography"], version = "^3.3.0" }
+# google-genai 2.x requires httpx >=0.28.1; keep the shared HTTP stack on a
+# compatible line so a clean backend environment can actually resolve.
+httpx = "^0.28.1"
+structlog = "^24.4.0"
+python-multipart = "^0.0.12"
+openai = "^1.51.0"
+# Alternative AI_PROVIDER — Gemini's free tier covers both chat and
+# embeddings, unlike OpenAI's pay-as-you-go-only API. See
+# app/modules/ai/provider.py and app/modules/search/embedding_provider.py.
+# Pinned to what GeminiChatProvider/GeminiEmbeddingProvider were actually
+# written and tested against (client.aio.models.*, types.Content/Part/
+# EmbedContentConfig) — the 1.x line has a materially different API surface.
+google-genai = "^2.13.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.3"
+pytest-asyncio = "^1.4.0"
+pytest-cov = "^5.0.0"
+ruff = "^0.15.22"
+mypy = "^1.11.2"
+faker = "^30.3.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = [
+    # PEP 695 `class Foo[T]` generics are Pydantic-v2-generics-incompatible
+    # in edge cases we'd rather not debug — Repository[T] and Page[T] stay
+    # on the classic `Generic[T]` form deliberately, not by oversight.
+    "UP046",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Hand-written migrations mirror DDL: one column/constraint per op arg makes
+# some lines unavoidably long, and rewrapping applied migrations is riskier
+# than tolerating the length.
+"alembic/versions/*" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

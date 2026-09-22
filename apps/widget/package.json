@@ -1,0 +1,22 @@
+{
+  "name": "@zello-ai/widget",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Embeddable customer widget. Vite + a Shadow-DOM web component — deliberately not Next.js, since it ships as a standalone <script> tag on partner sites, not a hosted app. Two build targets (see vite.config.ts): a text-only bundle and a voice-capable bundle, gated by tenant phase entitlement — see docs/architecture/auth-flow.md and the SRS's IP-protection requirement.",
+  "scripts": {
+    "dev": "vite",
+    "build:text": "vite build --mode text",
+    "build:voice": "vite build --mode voice",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist node_modules"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@zello-ai/config": "workspace:*",
+    "@zello-ai/types": "workspace:*",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.8"
+  }
+}

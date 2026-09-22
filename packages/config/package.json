@@ -1,0 +1,8 @@
+{
+  "name": "@zello-ai/config",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Shared TypeScript/ESLint base config for all apps.",
+  "main": "index.js",
+  "files": ["base.tsconfig.json", "eslint-preset.js"]
+}

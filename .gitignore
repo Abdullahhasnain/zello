@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+__pycache__/
+*.pyc
+.venv*/
+venv/
+
+# Build output
+.next/
+dist/
+build/
+*.egg-info/
+*.tsbuildinfo
+
+# Env
+.env
+.env.local
+.env.*
+!.env.example
+!**/.env.example
+
+# Turborepo
+.turbo/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Alembic / DB
+*.sqlite3
+
+# Docker
+docker-compose.override.yml
