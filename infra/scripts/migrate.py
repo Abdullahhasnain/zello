@@ -11,6 +11,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import asyncpg
 from sqlalchemy.engine import make_url
@@ -72,7 +73,17 @@ async def main() -> None:
 
 def _sync_dsn_env(name: str) -> str:
     value = os.environ[name]
-    return value.replace("postgresql+asyncpg://", "postgresql://")
+    value = value.replace("postgresql+asyncpg://", "postgresql://")
+
+    # SQLAlchemy's asyncpg dialect accepts ``ssl=require`` while asyncpg's
+    # direct DSN parser expects the libpq spelling ``sslmode=require``.
+    # Keep the provider URL valid for both call paths without weakening TLS.
+    parts = urlsplit(value)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    ssl_mode = query.pop("ssl", None)
+    if ssl_mode and "sslmode" not in query:
+        query["sslmode"] = ssl_mode
+    return urlunsplit(parts._replace(query=urlencode(query)))
 
 
 if __name__ == "__main__":
