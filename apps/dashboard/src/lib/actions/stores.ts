@@ -1,6 +1,6 @@
 "use server";
 
-import { currentUser } from "@clerk/nextjs/server";
+import { getStaffEmail } from "@/lib/staff-auth";
 import type { Tenant } from "@zello-ai/types";
 import { apiFetch } from "@/lib/api-client";
 import { ActionState, actionErrorMessage } from "./types";
@@ -9,8 +9,7 @@ export async function createStoreAction(_prev: ActionState, formData: FormData):
   try {
     // Email comes from the server-side Clerk session, never from the form —
     // the backend binds this Clerk identity as the new store's owner.
-    const user = await currentUser();
-    const email = user?.emailAddresses[0]?.emailAddress;
+    const email = await getStaffEmail();
     if (!email) {
       return { success: false, error: "Could not read your account email. Please sign in again." };
     }

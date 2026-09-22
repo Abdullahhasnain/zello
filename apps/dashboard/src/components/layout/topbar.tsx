@@ -12,7 +12,9 @@ export function Topbar() {
       <div className="hidden md:block" />
       <div className="flex items-center gap-2">
         <ThemeToggle />
-        <UserButton afterSignOutUrl="/sign-in" />
+        {process.env.AUTH_PROVIDER === "auth0"
+          ? <a href="/auth/logout" className="text-sm text-ink-soft hover:text-ink">Sign out</a>
+          : <UserButton afterSignOutUrl="/sign-in" />}
       </div>
     </header>
   );

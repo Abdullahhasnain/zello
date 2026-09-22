@@ -31,9 +31,12 @@ class Settings(BaseSettings):
     # --- Redis ---
     REDIS_URL: RedisDsn
 
-    # --- Auth: Clerk (store owner / admin) ---
-    CLERK_JWKS_URL: str
-    CLERK_ISSUER: str
+    # --- Auth: hosted identity provider (store owner / admin) ---
+    AUTH_PROVIDER: str = "clerk"  # clerk | auth0
+    CLERK_JWKS_URL: str | None = None
+    CLERK_ISSUER: str | None = None
+    AUTH0_DOMAIN: str | None = None
+    AUTH0_AUDIENCE: str | None = None
 
     # --- Internal service-to-service calls (e.g. the dashboard's Clerk
     # webhook route forwarding a user.created event) — shared secret, not a

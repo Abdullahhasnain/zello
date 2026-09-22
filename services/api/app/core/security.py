@@ -56,17 +56,23 @@ class ClerkJWKSClient:
 
 
 _clerk_client: ClerkJWKSClient | None = None
+_auth0_client: ClerkJWKSClient | None = None
 
 
 def get_clerk_client() -> ClerkJWKSClient:
     global _clerk_client
     if _clerk_client is None:
-        _clerk_client = ClerkJWKSClient(get_settings().CLERK_JWKS_URL)
+        url = get_settings().CLERK_JWKS_URL
+        if not url:
+            raise AuthenticationError("Clerk is not configured")
+        _clerk_client = ClerkJWKSClient(url)
     return _clerk_client
 
 
 async def verify_clerk_token(token: str) -> dict[str, Any]:
     settings = get_settings()
+    if not settings.CLERK_ISSUER:
+        raise AuthenticationError("Clerk is not configured")
     jwks = await get_clerk_client().get_jwks()
     try:
         header = jwt.get_unverified_header(token)
@@ -79,6 +85,42 @@ async def verify_clerk_token(token: str) -> dict[str, Any]:
             algorithms=["RS256"],
             issuer=settings.CLERK_ISSUER,
             options={"verify_aud": False},
+        )
+        return claims
+    except JWTError as exc:
+        raise AuthenticationError("Invalid or expired session token") from exc
+
+
+async def verify_staff_token(token: str) -> dict[str, Any]:
+    """Validate an owner/admin token from the configured identity provider.
+
+    The local store/admin tables remain the authorization boundary; switching
+    identity providers does not change tenant membership or RBAC.
+    """
+    settings = get_settings()
+    if settings.AUTH_PROVIDER == "clerk":
+        return await verify_clerk_token(token)
+    if settings.AUTH_PROVIDER != "auth0":
+        raise AuthenticationError("Unsupported staff identity provider")
+    if not settings.AUTH0_DOMAIN or not settings.AUTH0_AUDIENCE:
+        raise AuthenticationError("Auth0 is not configured")
+
+    global _auth0_client
+    domain = settings.AUTH0_DOMAIN.removeprefix("https://").rstrip("/")
+    if _auth0_client is None:
+        _auth0_client = ClerkJWKSClient(f"https://{domain}/.well-known/jwks.json")
+    jwks = await _auth0_client.get_jwks()
+    try:
+        header = jwt.get_unverified_header(token)
+        key = next((k for k in jwks["keys"] if k["kid"] == header["kid"]), None)
+        if key is None:
+            raise AuthenticationError("Unknown signing key")
+        claims: dict[str, Any] = jwt.decode(
+            token,
+            key,
+            algorithms=["RS256"],
+            issuer=f"https://{domain}/",
+            audience=settings.AUTH0_AUDIENCE,
         )
         return claims
     except JWTError as exc:

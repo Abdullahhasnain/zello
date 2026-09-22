@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { getStaffToken } from "@/lib/staff-auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
@@ -21,8 +21,7 @@ export async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const { getToken } = await auth();
-  const token = await getToken();
+  const token = await getStaffToken();
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,

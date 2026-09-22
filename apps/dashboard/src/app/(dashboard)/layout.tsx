@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { getStaffUserId } from "@/lib/staff-auth";
 import { redirect } from "next/navigation";
 import { getMyProfile } from "@/lib/api/users";
 import { ApiError } from "@/lib/api-client";
@@ -10,7 +10,7 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { userId } = await auth();
+  const userId = await getStaffUserId();
   if (!userId) redirect("/sign-in");
 
   // Signed in with Clerk but not yet linked to a store (fresh signup) —

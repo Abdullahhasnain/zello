@@ -1,11 +1,11 @@
-import { auth } from "@clerk/nextjs/server";
+import { getStaffUserId } from "@/lib/staff-auth";
 import { redirect } from "next/navigation";
 import { getMyProfile } from "@/lib/api/users";
 import { ApiError } from "@/lib/api-client";
 import { CreateStoreForm } from "@/components/stores/create-store-form";
 
 export default async function CreateStorePage() {
-  const { userId } = await auth();
+  const userId = await getStaffUserId();
   if (!userId) redirect("/sign-in");
 
   // Already linked to a store → nothing to create here.

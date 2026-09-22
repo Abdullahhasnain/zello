@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 // up with real credentials) — render without ClerkProvider instead of
 // crashing, so the app is still viewable. Set
 // NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY to enable auth.
-const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+const clerkConfigured = process.env.AUTH_PROVIDER !== "auth0" && Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
 export default function RootLayout({
   children,

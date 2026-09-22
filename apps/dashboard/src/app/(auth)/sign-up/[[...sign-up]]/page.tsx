@@ -1,7 +1,11 @@
 import { SignUp } from "@clerk/nextjs";
 import { clerkAppearance } from "@/lib/clerk-appearance";
+import { redirect } from "next/navigation";
+
+export const dynamic = "force-dynamic";
 
 export default function SignUpPage() {
+  if (process.env.AUTH_PROVIDER === "auth0") redirect("/auth/login?screen_hint=signup&returnTo=/create-store");
   return (
     <div>
       <h1 className="font-display text-xl font-semibold text-ink">Create your account</h1>

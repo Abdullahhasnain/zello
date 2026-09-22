@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { getStaffUserId } from "@/lib/staff-auth";
 import { redirect } from "next/navigation";
 
 // Structure-only shell. RBAC role check (super-admin / ops / support / finance —
@@ -9,7 +9,7 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { userId } = await auth();
+  const userId = await getStaffUserId();
   if (!userId) redirect("/sign-in");
 
   return <div data-shell="admin">{children}</div>;

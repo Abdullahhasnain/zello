@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { auth0 } from "@/lib/auth0";
 
 const isPublicRoute = createRouteMatcher([
   "/",
@@ -16,7 +18,17 @@ const isPublicRoute = createRouteMatcher([
 // request. Set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY to enable auth.
 const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
-export default clerkConfigured
+export default process.env.AUTH_PROVIDER === "auth0"
+  ? async (req: NextRequest) => {
+      const response = await auth0!.middleware(req);
+      // Server Components cannot persist a refreshed access token themselves.
+      // Refresh through middleware, where the SDK can update the session cookie.
+      if (!isPublicRoute(req) && !req.nextUrl.pathname.startsWith("/auth/") && await auth0!.getSession(req)) {
+        await auth0!.getAccessToken(req, response);
+      }
+      return response;
+    }
+  : clerkConfigured
   ? clerkMiddleware(async (auth, req) => {
       if (!isPublicRoute(req)) {
         await auth.protect();

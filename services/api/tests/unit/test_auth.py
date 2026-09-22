@@ -18,6 +18,7 @@ from app.core.security import (
     issue_customer_jwt,
     verify_clerk_token,
     verify_customer_jwt,
+    verify_staff_token,
 )
 from app.domain.entities.user import AdminRole, AdminUser, StoreUser, StoreUserRole
 from app.shared.deps import (
@@ -215,7 +216,7 @@ async def test_get_current_store_auth_resolves_known_user(monkeypatch: pytest.Mo
     async def fake_verify(_token: str) -> dict:
         return {"sub": "clerk_abc"}
 
-    monkeypatch.setattr("app.shared.deps.verify_clerk_token", fake_verify)
+    monkeypatch.setattr("app.shared.deps.verify_staff_token", fake_verify)
 
     auth = await get_current_store_auth("irrelevant-token", fake_service)
 
@@ -230,7 +231,7 @@ async def test_get_current_store_auth_rejects_unknown_clerk_id(monkeypatch: pyte
     async def fake_verify(_token: str) -> dict:
         return {"sub": "clerk_unknown"}
 
-    monkeypatch.setattr("app.shared.deps.verify_clerk_token", fake_verify)
+    monkeypatch.setattr("app.shared.deps.verify_staff_token", fake_verify)
 
     with pytest.raises(AuthenticationError):
         await get_current_store_auth("irrelevant-token", fake_service)
@@ -243,7 +244,7 @@ async def test_get_current_admin_auth_resolves_known_admin(monkeypatch: pytest.M
     async def fake_verify(_token: str) -> dict:
         return {"sub": "clerk_ops1"}
 
-    monkeypatch.setattr("app.shared.deps.verify_clerk_token", fake_verify)
+    monkeypatch.setattr("app.shared.deps.verify_staff_token", fake_verify)
 
     auth = await get_current_admin_auth("irrelevant-token", fake_service)
 
@@ -264,7 +265,7 @@ async def test_a_store_owner_session_cannot_satisfy_admin_auth(monkeypatch: pyte
     async def fake_verify(_token: str) -> dict:
         return {"sub": "clerk_abc"}
 
-    monkeypatch.setattr("app.shared.deps.verify_clerk_token", fake_verify)
+    monkeypatch.setattr("app.shared.deps.verify_staff_token", fake_verify)
 
     with pytest.raises(AuthenticationError):
         await get_current_admin_auth("irrelevant-token", fake_service)
@@ -381,3 +382,43 @@ def _settings_with_issuer(issuer: str):
     # Settings is a frozen-ish pydantic model in practice but not literally
     # frozen; safest is a shallow copy with the one field overridden.
     return settings.model_copy(update={"CLERK_ISSUER": issuer})
+
+
+@pytest.mark.parametrize("audience,accepted", [("urn:zello-ai:api", True), ("urn:other:api", False)])
+async def test_auth0_staff_token_requires_correct_api_audience(
+    monkeypatch: pytest.MonkeyPatch, rsa_keypair, audience: str, accepted: bool
+) -> None:
+    private_key, public_key = rsa_keypair
+    public_jwk = jwk.construct(public_key, algorithm="RS256").to_dict()
+    public_jwk["kid"] = "auth0-test-key"
+
+    async def fake_get_jwks(_self) -> dict:
+        return {"keys": [public_jwk]}
+
+    monkeypatch.setattr(ClerkJWKSClient, "get_jwks", fake_get_jwks)
+    from app.core.config import get_settings
+
+    settings = get_settings().model_copy(update={
+        "AUTH_PROVIDER": "auth0",
+        "AUTH0_DOMAIN": "test.us.auth0.com",
+        "AUTH0_AUDIENCE": "urn:zello-ai:api",
+    })
+    monkeypatch.setattr("app.core.security.get_settings", lambda: settings)
+    now = datetime.now(UTC)
+    token = jwt.encode(
+        {
+            "sub": "auth0|owner-1",
+            "iss": "https://test.us.auth0.com/",
+            "aud": audience,
+            "iat": now,
+            "exp": now + timedelta(minutes=5),
+        },
+        _pem(private_key),
+        algorithm="RS256",
+        headers={"kid": "auth0-test-key"},
+    )
+    if accepted:
+        assert (await verify_staff_token(token))["sub"] == "auth0|owner-1"
+    else:
+        with pytest.raises(AuthenticationError):
+            await verify_staff_token(token)

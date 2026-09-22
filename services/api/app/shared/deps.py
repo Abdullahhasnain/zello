@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.security import AuthContext, verify_clerk_token, verify_customer_jwt
+from app.core.security import AuthContext, verify_customer_jwt, verify_staff_token
 from app.db.session import get_scoped_db_session
 from app.modules.users.dependencies import get_user_service
 from app.modules.users.service import UserService
@@ -51,7 +51,7 @@ async def get_clerk_identity(token: Annotated[str, Depends(_bearer_token)]) -> d
     an existing StoreUser row. Only for the one endpoint that runs before
     tenant membership exists: self-serve store creation (POST /tenants).
     Every other store-facing route must use get_current_store_auth."""
-    return await verify_clerk_token(token)
+    return await verify_staff_token(token)
 
 
 async def get_current_store_auth(
@@ -61,7 +61,7 @@ async def get_current_store_auth(
     """Verifies a Clerk session JWT and resolves it to a local StoreUser —
     the identity/tenant-membership split described in
     docs/architecture/auth-flow.md."""
-    claims = await verify_clerk_token(token)
+    claims = await verify_staff_token(token)
     clerk_user_id: str = claims["sub"]
 
     store_user = await user_service.get_store_user_by_clerk_id(clerk_user_id)
@@ -84,7 +84,7 @@ async def get_current_admin_auth(
     """Verifies a Clerk session JWT and resolves it to a local AdminUser.
     Kept entirely separate from get_current_store_auth so a store-owner
     session can never accidentally satisfy an admin-only dependency."""
-    claims = await verify_clerk_token(token)
+    claims = await verify_staff_token(token)
     clerk_user_id: str = claims["sub"]
 
     admin_user = await user_service.get_admin_by_clerk_id(clerk_user_id)

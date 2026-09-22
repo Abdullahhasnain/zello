@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 // Renders without ClerkProvider until a publishable key is configured, so
 // the app builds and previews before Clerk credentials exist — same
 // pattern as apps/dashboard/src/app/layout.tsx.
-const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+const clerkConfigured = process.env.AUTH_PROVIDER !== "auth0" && Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
 export default function RootLayout({
   children,
