@@ -154,6 +154,10 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
     this.tenantSlug = config.tenantSlug;
     this.position = config.position;
     this.lastReplyLanguage = config.language;
+    // Free deployments can explicitly skip unavailable server STT/TTS.
+    // Keep server-first behaviour for existing partner embeds by default.
+    this.serverTranscriptionUnavailable = config.voiceMode === "browser";
+    this.serverSpeechUnavailable = config.voiceMode === "browser";
     this.voiceSupported =
       ServerVoiceRecorder.isSupported() ||
       (isSpeechRecognitionSupported() && isSpeechSynthesisSupported());

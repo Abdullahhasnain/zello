@@ -18,6 +18,7 @@ export interface WidgetConfig {
   apiBaseUrl: string;
   language: "roman_urdu" | "urdu" | "english";
   position: "bottom-right" | "bottom-left";
+  voiceMode?: "auto" | "browser";
 }
 
 const DEFAULT_API_BASE_URL = "https://api.zello.ai/api/v1";
@@ -78,5 +79,6 @@ export function loadWidgetConfig(): WidgetConfig {
     apiBaseUrl: script?.dataset.apiBaseUrl || DEFAULT_API_BASE_URL,
     language: resolveInitialLanguage(script?.dataset.language),
     position: position === "bottom-left" ? "bottom-left" : "bottom-right",
+    voiceMode: script?.dataset.voiceMode === "browser" ? "browser" : "auto",
   };
 }

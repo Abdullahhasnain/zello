@@ -47,6 +47,7 @@ export default async function StorefrontLayout({
         data-tenant-slug={slug}
         data-api-base-url={API_BASE_URL}
         data-position="bottom-right"
+        data-voice-mode={process.env.ZELLO_VOICE_MODE === "browser" ? "browser" : "auto"}
         async
       />
     </div>
