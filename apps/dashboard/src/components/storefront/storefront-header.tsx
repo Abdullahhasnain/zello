@@ -29,8 +29,8 @@ export function StorefrontHeader({
     // Product pages dispatch this after add-to-cart so the badge updates
     // without a page reload.
     const onCartChange = (event: Event) => {
-      const detail = (event as CustomEvent<{ count: number }>).detail;
-      if (detail) setItemCount(detail.count);
+      const detail = (event as CustomEvent<{ count: number; slug?: string }>).detail;
+      if (detail && (!detail.slug || detail.slug === slug)) setItemCount(detail.count);
     };
     window.addEventListener("zello:cart-changed", onCartChange);
     return () => {

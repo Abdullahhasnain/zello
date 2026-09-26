@@ -53,7 +53,13 @@ class SqlAlchemyConversationRepository(ConversationRepository):
         self._session = session
 
     async def get_by_id(self, entity_id: UUID) -> Conversation | None:
-        model = await self._session.get(ConversationModel, entity_id)
+        result = await self._session.execute(
+            select(ConversationModel)
+            .where(ConversationModel.id == entity_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        model = result.scalar_one_or_none()
         return _to_entity(model) if model else None
 
     async def list(self, *, limit: int = 50, offset: int = 0) -> list[Conversation]:
@@ -103,9 +109,7 @@ class SqlAlchemyConversationRepository(ConversationRepository):
         if model is not None:
             await self._session.delete(model)
 
-    async def add_message(
-        self, conversation_id: UUID, message: ConversationMessage
-    ) -> ConversationMessage:
+    async def add_message(self, conversation_id: UUID, message: ConversationMessage) -> ConversationMessage:
         model = ConversationMessageModel(
             id=message.id,
             conversation_id=conversation_id,

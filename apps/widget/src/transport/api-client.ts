@@ -53,6 +53,8 @@ export class ApiClient {
         skipAuth: true,
       },
     );
+    const racedSession = this.storage.getSession();
+    if (racedSession) return racedSession;
     this.storage.setSession({
       ...session,
       conversationId: null,
@@ -85,13 +87,22 @@ export class ApiClient {
     conversationId: string,
     content: string,
   ): Promise<MessageExchangeResponse> {
-    return this.request<MessageExchangeResponse>(
+    const result = await this.request<MessageExchangeResponse>(
       `/conversations/${conversationId}/messages`,
       {
         method: "POST",
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, requestId: crypto.randomUUID(),
+          cartId: window.localStorage.getItem(`zello.storefront.cart.${this.tenantSlug}`) }),
       },
     );
+    const intent = result.assistantMessage.intent;
+    if (intent.action === "add_to_cart" && typeof intent.cart_id === "string") {
+      window.localStorage.setItem(`zello.storefront.cart.${this.tenantSlug}`, intent.cart_id);
+      window.dispatchEvent(new CustomEvent("zello:cart-changed", {
+        detail: { count: intent.cart_count, slug: this.tenantSlug },
+      }));
+    }
+    return result;
   }
 
   /** Same tenant-scoped, RLS-isolated read the storefront pages use (see
@@ -147,6 +158,7 @@ export class ApiClient {
   private async requestResponse(
     path: string,
     init: RequestInit & { skipAuth?: boolean } = {},
+    refreshedOnce = false,
   ): Promise<Response> {
     const { skipAuth, ...requestInit } = init;
     const session = skipAuth ? null : this.storage.getSession();
@@ -162,10 +174,10 @@ export class ApiClient {
       ...requestInit,
       headers,
     });
-    if (response.status === 401 && session) {
+    if (response.status === 401 && session && !refreshedOnce) {
       const refreshed = await this.tryRefresh(session.refreshToken);
       if (refreshed) {
-        return this.requestResponse(path, init);
+        return this.requestResponse(path, init, true);
       }
     }
     if (!response.ok) {

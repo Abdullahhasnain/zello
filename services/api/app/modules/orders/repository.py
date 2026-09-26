@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +16,7 @@ from app.domain.entities.order import (
     PaymentStatus,
 )
 from app.domain.repositories.order_repository import CartRepository, OrderRepository
-from app.modules.orders.models import CartItemModel, CartModel, OrderModel, PaymentModel
+from app.modules.orders.models import CartItemModel, CartModel, OrderItemModel, OrderModel, PaymentModel
 
 
 def _cart_to_entity(model: CartModel) -> Cart:
@@ -73,7 +73,13 @@ class SqlAlchemyCartRepository(CartRepository):
         self._session = session
 
     async def get_by_id(self, entity_id: UUID) -> Cart | None:
-        model = await self._session.get(CartModel, entity_id)
+        result = await self._session.execute(
+            select(CartModel)
+            .where(CartModel.id == entity_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        model = result.scalar_one_or_none()
         return _cart_to_entity(model) if model else None
 
     async def get_open_cart_for_conversation(self, conversation_id: UUID) -> Cart | None:
@@ -117,9 +123,7 @@ class SqlAlchemyCartRepository(CartRepository):
             await self._session.delete(model)
 
     async def list_items(self, cart_id: UUID) -> list[CartItem]:
-        result = await self._session.execute(
-            select(CartItemModel).where(CartItemModel.cart_id == cart_id)
-        )
+        result = await self._session.execute(select(CartItemModel).where(CartItemModel.cart_id == cart_id))
         return [_cart_item_to_entity(m) for m in result.scalars().all()]
 
     async def add_item(self, cart_id: UUID, item: CartItem) -> CartItem:
@@ -172,9 +176,7 @@ class SqlAlchemyOrderRepository(OrderRepository):
         result = await self._session.execute(select(OrderModel).limit(limit).offset(offset))
         return [_order_to_entity(m) for m in result.scalars().all()]
 
-    async def list_by_tenant(
-        self, tenant_id: UUID, *, limit: int = 50, offset: int = 0
-    ) -> list[Order]:
+    async def list_by_tenant(self, tenant_id: UUID, *, limit: int = 50, offset: int = 0) -> list[Order]:
         result = await self._session.execute(
             select(OrderModel)
             .where(OrderModel.tenant_id == tenant_id)
@@ -199,6 +201,24 @@ class SqlAlchemyOrderRepository(OrderRepository):
         )
         self._session.add(model)
         await self._session.flush()
+        # Persist immutable purchase lines; converted cart rows are not the
+        # order's source of truth after checkout.
+        if entity.cart_id:
+            result = await self._session.execute(
+                select(CartItemModel).where(CartItemModel.cart_id == entity.cart_id)
+            )
+            for item in result.scalars().all():
+                self._session.add(
+                    OrderItemModel(
+                        id=uuid4(),
+                        order_id=entity.id,
+                        product_id=item.product_id,
+                        quantity=item.quantity,
+                        unit_price=item.unit_price,
+                        subtotal=item.unit_price * item.quantity,
+                    )
+                )
+            await self._session.flush()
         return _order_to_entity(model)
 
     async def update(self, entity: Order) -> Order:

@@ -46,12 +46,14 @@ async function bootstrapSession(slug: string): Promise<GuestSession> {
     method: "POST",
     body: JSON.stringify({ tenantSlug: slug }),
   });
+  const raced = storedSession(slug);
+  if (raced) return raced;
   localStorage.setItem(sessionKey(slug), JSON.stringify(session));
   return session;
 }
 
 function storedSession(slug: string): GuestSession | null {
-  const raw = localStorage.getItem(sessionKey(slug));
+  const raw = localStorage.getItem(sessionKey(slug)) ?? localStorage.getItem(`zello:${slug}:session`);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as GuestSession;
@@ -72,10 +74,17 @@ async function storefrontFetch<T>(slug: string, path: string, init: RequestInit 
     return await attempt(session.accessToken);
   } catch (error) {
     if (error instanceof StorefrontApiError && error.status === 401) {
-      // Expired/invalid guest token — new session means a new guest
-      // customer, so the old cart (bound to the old identity) is dropped.
-      localStorage.removeItem(cartKey(slug));
-      session = await bootstrapSession(slug);
+      try {
+        session = await rawFetch<GuestSession>("/auth/refresh", {
+          method: "POST", body: JSON.stringify({ refreshToken: session.refreshToken }),
+        });
+        localStorage.setItem(sessionKey(slug), JSON.stringify(session));
+      } catch {
+        localStorage.removeItem(cartKey(slug));
+        localStorage.removeItem(sessionKey(slug));
+        localStorage.removeItem(`zello:${slug}:session`);
+        session = await bootstrapSession(slug);
+      }
       return attempt(session.accessToken);
     }
     throw error;
@@ -129,7 +138,7 @@ function storedCartId(slug: string): string | null {
 
 async function ensureCart(slug: string): Promise<string> {
   const existing = storedCartId(slug);
-  if (existing) return existing;
+  if (existing && await getCart(slug)) return existing;
   const cart = await storefrontFetch<{ id: string }>(slug, "/orders/carts", { method: "POST" });
   localStorage.setItem(cartKey(slug), cart.id);
   return cart.id;
@@ -147,7 +156,12 @@ export async function getCart(slug: string): Promise<CartDetail | null> {
   const cartId = storedCartId(slug);
   if (!cartId) return null;
   try {
-    return await storefrontFetch<CartDetail>(slug, `/orders/carts/${cartId}`);
+    const cart = await storefrontFetch<CartDetail>(slug, `/orders/carts/${cartId}`);
+    if (cart.status !== "open") {
+      localStorage.removeItem(cartKey(slug));
+      return null;
+    }
+    return cart;
   } catch (error) {
     if (error instanceof StorefrontApiError && error.status === 404) {
       localStorage.removeItem(cartKey(slug));

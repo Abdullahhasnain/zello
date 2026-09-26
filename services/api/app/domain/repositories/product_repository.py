@@ -13,6 +13,9 @@ from app.domain.repositories.base import Repository
 
 
 class ProductRepository(Repository[Product]):
+    async def get_for_update(self, entity_id: UUID) -> Product | None:
+        return await self.get_by_id(entity_id)
+
     @abstractmethod
     async def get_by_external_id(self, tenant_id: UUID, external_id: str) -> Product | None: ...
 

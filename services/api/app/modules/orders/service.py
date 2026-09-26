@@ -11,6 +11,7 @@ from app.domain.entities.order import (
     PaymentProvider,
     PaymentStatus,
 )
+from app.domain.entities.product import ProductStatus
 from app.domain.repositories.order_repository import CartRepository, OrderRepository
 from app.domain.repositories.product_repository import ProductRepository
 from app.shared.exceptions import NotFoundError, ValidationError
@@ -28,28 +29,53 @@ class OrderService:
         cart_repository: CartRepository,
         order_repository: OrderRepository,
         product_repository: ProductRepository,
+        customer_id: UUID | None = None,
     ) -> None:
         self._carts = cart_repository
         self._orders = order_repository
         self._products = product_repository
+        self._customer_id = customer_id
 
     async def create_cart(self, tenant_id: UUID, conversation_id: UUID | None = None) -> Cart:
-        cart = Cart(id=uuid4(), tenant_id=tenant_id, status=CartStatus.OPEN, conversation_id=conversation_id)
+        cart = Cart(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            status=CartStatus.OPEN,
+            conversation_id=conversation_id,
+            customer_id=self._customer_id,
+        )
         return await self._carts.add(cart)
 
+    async def _owned_cart(self, cart_id: UUID) -> Cart:
+        cart = await self._carts.get_by_id(cart_id)
+        if cart is None or (self._customer_id is not None and cart.customer_id != self._customer_id):
+            raise NotFoundError("Cart not found")
+        return cart
+
+    @staticmethod
+    def _require_open(cart: Cart) -> None:
+        if cart.status != CartStatus.OPEN:
+            raise ValidationError("This cart has already been checked out")
+
     async def add_item(self, cart_id: UUID, product_id: UUID, quantity: int) -> CartItem:
+        cart = await self._owned_cart(cart_id)
+        self._require_open(cart)
         # Price is read from the catalog, never accepted from the client —
         # same price-tampering concern as the checkout total below.
         product = await self._products.get_by_id(product_id)
-        if product is None:
+        if product is None or product.tenant_id != cart.tenant_id:
             raise NotFoundError(f"Product {product_id} not found")
         if quantity < 1:
             raise ValidationError("Quantity must be at least 1")
+        if product.status != ProductStatus.ACTIVE or quantity > product.stock_qty:
+            raise ValidationError("Requested quantity is not in stock")
 
         # Same product added twice merges into one line rather than
         # duplicating rows — what every cart UI expects.
         for existing in await self._carts.list_items(cart_id):
             if existing.product_id == product_id:
+                if existing.quantity + quantity > product.stock_qty:
+                    raise ValidationError("Requested quantity is not in stock")
                 existing.quantity += quantity
                 return await self._carts.update_item(existing)
 
@@ -59,7 +85,7 @@ class OrderService:
         return await self._carts.add_item(cart_id, item)
 
     async def get_cart(self, tenant_id: UUID, cart_id: UUID) -> Cart:
-        cart = await self._carts.get_by_id(cart_id)
+        cart = await self._owned_cart(cart_id)
         if cart is None or cart.tenant_id != tenant_id:
             raise NotFoundError(f"Cart {cart_id} not found")
         return cart
@@ -82,22 +108,29 @@ class OrderService:
     async def update_item_quantity(
         self, tenant_id: UUID, cart_id: UUID, item_id: UUID, quantity: int
     ) -> CartItem:
-        await self.get_cart(tenant_id, cart_id)  # 404s on wrong tenant
+        self._require_open(await self.get_cart(tenant_id, cart_id))
         if quantity < 1:
             raise ValidationError("Quantity must be at least 1 — remove the item instead")
         item = await self._carts.get_item(cart_id, item_id)
         if item is None:
             raise NotFoundError(f"Cart item {item_id} not found")
+        product = await self._products.get_by_id(item.product_id)
+        if product is None or product.status != ProductStatus.ACTIVE or quantity > product.stock_qty:
+            raise ValidationError("Requested quantity is not in stock")
         item.quantity = quantity
         return await self._carts.update_item(item)
 
     async def remove_item(self, tenant_id: UUID, cart_id: UUID, item_id: UUID) -> None:
-        await self.get_cart(tenant_id, cart_id)
+        self._require_open(await self.get_cart(tenant_id, cart_id))
         await self._carts.remove_item(cart_id, item_id)
 
     async def get_order(self, tenant_id: UUID, order_id: UUID) -> Order:
         order = await self._orders.get_by_id(order_id)
-        if order is None or order.tenant_id != tenant_id:
+        if (
+            order is None
+            or order.tenant_id != tenant_id
+            or (self._customer_id is not None and order.customer_id != self._customer_id)
+        ):
             raise NotFoundError(f"Order {order_id} not found")
         return order
 
@@ -115,13 +148,28 @@ class OrderService:
                 "Autonomous checkout requires explicit customer confirmation below the confidence threshold"
             )
 
-        cart = await self._carts.get_by_id(cart_id)
-        if cart is None:
-            raise NotFoundError(f"Cart {cart_id} not found")
+        if payment_method != PaymentProvider.COD:
+            raise ValidationError("Only cash on delivery is enabled")
+        cart = await self.get_cart(tenant_id, cart_id)
+        self._require_open(cart)
 
         items = await self._carts.list_items(cart_id)
         if not items:
             raise ValidationError("Cannot check out an empty cart")
+        # Lock inventory in a consistent order across carts to prevent overselling.
+        products = []
+        for item in sorted(items, key=lambda row: str(row.product_id)):
+            product = await self._products.get_for_update(item.product_id)
+            if (
+                product is None
+                or product.tenant_id != tenant_id
+                or product.status != ProductStatus.ACTIVE
+                or product.stock_qty < item.quantity
+            ):
+                raise ValidationError("A cart item is no longer available in the requested quantity")
+            if item.unit_price != product.price:
+                raise ValidationError("A price changed. Remove and re-add the item before checkout")
+            products.append((product, item.quantity))
         # Always computed server-side from persisted cart_items — an order
         # total supplied by the client would be a price-tampering hole.
         total_amount = sum((item.unit_price * item.quantity for item in items), Decimal("0"))
@@ -139,6 +187,11 @@ class OrderService:
             conversation_id=cart.conversation_id,
         )
         order = await self._orders.add(order)
+        for product, quantity in products:
+            product.stock_qty -= quantity
+            if product.stock_qty == 0:
+                product.status = ProductStatus.OUT_OF_STOCK
+            await self._products.update(product)
 
         cart.status = CartStatus.CONVERTED
         await self._carts.update(cart)

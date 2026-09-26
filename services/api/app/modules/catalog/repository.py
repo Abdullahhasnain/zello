@@ -131,6 +131,16 @@ class SqlAlchemyProductRepository(ProductRepository):
         model = await self._session.get(ProductModel, entity_id)
         return _to_entity(model) if model else None
 
+    async def get_for_update(self, entity_id: UUID) -> Product | None:
+        result = await self._session.execute(
+            select(ProductModel)
+            .where(ProductModel.id == entity_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        model = result.scalar_one_or_none()
+        return _to_entity(model) if model else None
+
     async def get_by_external_id(self, tenant_id: UUID, external_id: str) -> Product | None:
         result = await self._session.execute(
             select(ProductModel).where(

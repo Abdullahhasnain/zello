@@ -30,9 +30,25 @@ export class WidgetStorage {
 
   getSession(): StoredSession | null {
     const raw = window.localStorage.getItem(keyFor(this.tenantSlug, "session"));
-    if (!raw) return null;
     try {
-      return JSON.parse(raw) as StoredSession;
+      const own = raw ? JSON.parse(raw) as StoredSession : null;
+      const sharedKey = `zello.storefront.session.${this.tenantSlug}`;
+      const sharedRaw = window.localStorage.getItem(sharedKey);
+      const shared = sharedRaw ? JSON.parse(sharedRaw) as StoredSession : null;
+      if (shared?.accessToken && shared.customerId) {
+        if (own?.customerId !== shared.customerId) {
+          // Old separate guest identities cannot share a conversation. The
+          // server transcript is preserved; only this local display cache resets.
+          this.clearMessages();
+          const adopted = { ...shared, conversationId: null, branding: null };
+          window.localStorage.setItem(keyFor(this.tenantSlug, "session"), JSON.stringify(adopted));
+          return adopted;
+        }
+        return { ...own, ...shared, conversationId: own?.conversationId ?? null,
+          branding: own?.branding ?? null };
+      }
+      if (own) window.localStorage.setItem(sharedKey, JSON.stringify(own));
+      return own;
     } catch {
       // Corrupted or from an incompatible older widget version — treat as
       // absent rather than throwing and breaking the whole widget.
@@ -42,10 +58,15 @@ export class WidgetStorage {
 
   setSession(session: StoredSession): void {
     window.localStorage.setItem(keyFor(this.tenantSlug, "session"), JSON.stringify(session));
+    const { accessToken, refreshToken, customerId, tenantId } = session;
+    window.localStorage.setItem(`zello.storefront.session.${this.tenantSlug}`,
+      JSON.stringify({ accessToken, refreshToken, customerId, tenantId }));
   }
 
   clearSession(): void {
     window.localStorage.removeItem(keyFor(this.tenantSlug, "session"));
+    window.localStorage.removeItem(`zello.storefront.session.${this.tenantSlug}`);
+    window.localStorage.removeItem(`zello.storefront.cart.${this.tenantSlug}`);
   }
 
   setConversationId(conversationId: string): void {

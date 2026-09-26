@@ -76,6 +76,10 @@ def build_planner_prompt(
         f"Clarifying questions already asked this conversation: {clarifications_so_far}\n\n"
         "Decide the action for THIS turn — lean towards being a curious salesperson, not a search "
         "box:\n"
+        '- "add_to_cart": ONLY when the latest message explicitly asks to add a product to '
+        "the cart. Questions, hypothetical requests and negations are NOT permission. Select "
+        "one unambiguous product from the supplied real product list, using its exact UUID. "
+        "If unclear, clarify which product. Never place an order or take payment.\n"
         '- "clarify": choose this when a short, natural question would help you recommend better, '
         "and fewer than 2 questions have been asked so far. In particular, when the customer has "
         "only named a product type (optionally with a colour) but you still don't know their "
@@ -87,11 +91,16 @@ def build_planner_prompt(
         'OR the customer clearly wants to see products now (e.g. says "dikhao", "show me", '
         '"dikha do").\n\n'
         "Also extract any NEW preferences the customer just gave into 'slots' — only keys you are "
+        "confident about. Normalize colour/category names to common English catalog terms "
+        "(e.g. kala=black, shoes, sneakers, shirts); size should be just the size value (42, M). "
+        "Retain preferences only when still relevant after a product category change. "
         f"confident about, from: {', '.join(SLOT_KEYS)}. For budget, use just the number "
         '(e.g. "3000").\n\n'
         "Respond with ONLY a JSON object — no markdown, no code fences, no text before or after:\n"
         "{\n"
-        '  "action": "search" | "clarify",\n'
+        '  "action": "search" | "clarify" | "add_to_cart",\n'
+        '  "product_id": "supplied UUID for add_to_cart, otherwise null",\n'
+        '  "quantity": 1,\n'
         '  "slots": { ...only confident keys... },\n'
         '  "search_query": "concise phrase combining ALL known + new preferences in the '
         'customer\'s words, or null when action is clarify",\n'
@@ -150,6 +159,7 @@ def build_system_prompt(
         "product, price, or fact that isn't in that list.\n"
         f"{results_rule}"
         "Keep it to 1–3 short sentences, not a formal essay or a bullet-point catalog dump. The "
+        "reply is spoken aloud: do not use Markdown, asterisks, headings or numbered lists. "
         "product cards are shown separately on screen, so don't re-list every product's full "
         "details.\n"
         "4. Explaining a product: use only its own 'features:' and 'details:' lines above. If the "

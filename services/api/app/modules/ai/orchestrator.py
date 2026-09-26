@@ -59,6 +59,8 @@ class TurnPlan:
     slots: dict[str, str] = field(default_factory=dict)
     search_query: str | None = None
     reply: str | None = None
+    product_id: str | None = None
+    quantity: int = 1
 
 
 class AIOrchestrator:
@@ -88,6 +90,7 @@ class AIOrchestrator:
         clarifications_so_far: int,
         query: str,
         history: list[ConversationMessage],
+        recent_products: list[Product] | None = None,
     ) -> TurnPlan | None:
         """Decides how to handle this turn like a salesperson — ask one
         clarifying question, or search now (see build_planner_prompt).
@@ -106,7 +109,9 @@ class AIOrchestrator:
                     language=language,
                     known_preferences=known_preferences,
                     clarifications_so_far=clarifications_so_far,
-                ),
+                )
+                + "\n\n"
+                + format_product_context(recent_products or []),
             )
         ]
         for turn in history[-self._history_turns :]:
@@ -205,7 +210,7 @@ def _parse_plan(raw: str) -> TurnPlan | None:
         return None
 
     action = data.get("action")
-    if action not in ("search", "clarify"):
+    if action not in ("search", "clarify", "add_to_cart"):
         return None
 
     raw_slots = data.get("slots")
@@ -224,9 +229,14 @@ def _parse_plan(raw: str) -> TurnPlan | None:
 
     search_query = data.get("search_query")
     reply = data.get("reply")
+    quantity = data.get("quantity", 1)
+    if isinstance(quantity, bool) or not isinstance(quantity, int) or not 1 <= quantity <= 20:
+        return None
     return TurnPlan(
         action=action,
         slots=slots,
         search_query=str(search_query).strip() if search_query else None,
         reply=str(reply).strip() if reply else None,
+        product_id=str(data["product_id"]) if data.get("product_id") else None,
+        quantity=quantity,
     )

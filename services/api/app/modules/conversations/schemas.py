@@ -1,6 +1,8 @@
 from datetime import datetime
 from uuid import UUID
 
+from pydantic import Field
+
 from app.modules.tenants.schemas import TenantBranding
 from app.shared.schema import CamelModel
 
@@ -30,7 +32,9 @@ class ConversationRead(CamelModel):
 
 
 class PostMessageRequest(CamelModel):
-    content: str
+    content: str = Field(min_length=1, max_length=4000)
+    cart_id: UUID | None = None
+    request_id: UUID | None = None
 
 
 class MessageExchangeRead(CamelModel):

@@ -19,6 +19,7 @@ from app.modules.conversations.dependencies import (
     get_conversation_service_for_customer,
     get_conversation_service_for_store,
 )
+from app.modules.conversations.product_matching import matches_preferences
 from app.modules.conversations.reply_composer import compose_greeting
 from app.modules.conversations.schemas import (
     ConversationMessageRead,
@@ -28,6 +29,8 @@ from app.modules.conversations.schemas import (
     PostMessageRequest,
 )
 from app.modules.conversations.service import ConversationService
+from app.modules.orders.dependencies import get_order_service_for_customer
+from app.modules.orders.service import OrderService
 from app.modules.search.dependencies import get_search_service_for_customer
 from app.modules.search.normalization import detect_language
 from app.modules.search.service import SearchService
@@ -35,7 +38,7 @@ from app.modules.tenants.dependencies import get_tenant_service_for_customer
 from app.modules.tenants.schemas import TenantBranding
 from app.modules.tenants.service import TenantService
 from app.shared.deps import get_current_customer_auth, get_current_store_auth
-from app.shared.exceptions import RateLimitExceededError
+from app.shared.exceptions import NotFoundError, RateLimitExceededError, ValidationError
 from app.shared.pagination import PageParams, page_params
 
 logger = get_logger(__name__)
@@ -96,6 +99,16 @@ def _references_recent_products(text: str) -> bool:
     return bool(_FOLLOW_UP_REFERENCE.search(text))
 
 
+def _explicit_cart_request(text: str) -> bool:
+    """Independent safety gate: the planner alone cannot authorize a mutation."""
+    text = text.lower()
+    return (
+        bool(re.search(r"\b(cart|basket)\b|کارٹ|ٹوکری", text))
+        and bool(re.search(r"\b(add|put|daal|dal|dalo|daalo)\b|ڈال|شامل", text))
+        and not re.search(r"\b(not|don't|dont|never|nahi|nahin|mat|how|kaise)\b|نہیں|مت|کیسے", text)
+    )
+
+
 async def _load_recent_products(
     catalog_service: CatalogService,
     tenant_id: UUID,
@@ -134,9 +147,7 @@ async def _find_alternatives(
             continue
         seen_terms.add(term_str)
         try:
-            results = await search_service.search_products(
-                tenant_id, str(term), top_k=_REPLY_PRODUCT_LIMIT
-            )
+            results = await search_service.search_products(tenant_id, str(term), top_k=_REPLY_PRODUCT_LIMIT)
         except Exception:  # noqa: BLE001 — an embeddings outage just means no alternatives
             results = []
         if results:
@@ -189,6 +200,7 @@ async def post_message(
     catalog_service: Annotated[CatalogService, Depends(get_catalog_service_for_customer)],
     tenant_service: Annotated[TenantService, Depends(get_tenant_service_for_customer)],
     ai_orchestrator: Annotated[AIOrchestrator, Depends(get_ai_orchestrator)],
+    order_service: Annotated[OrderService, Depends(get_order_service_for_customer)],
 ) -> MessageExchangeRead:
     """Handles a turn like a salesperson, in two phases (see
     app/modules/ai/orchestrator.py):
@@ -211,16 +223,28 @@ async def post_message(
     "Casual" that detects as English won't flip an established Roman-Urdu
     chat — only a positive non-English signal switches it."""
     conversation = await conversation_service.get_conversation(conversation_id)
+    if conversation.customer_id != UUID(_auth.subject_id):
+        raise NotFoundError("Conversation not found")
+
+    history = await conversation_service.get_transcript(conversation_id)
+    if payload.request_id:
+        previous = [m for m in history if m.intent.get("request_id") == str(payload.request_id)]
+        customer = next((m for m in previous if m.role == MessageRole.CUSTOMER), None)
+        assistant = next((m for m in previous if m.role == MessageRole.ASSISTANT), None)
+        if customer and assistant:
+            return MessageExchangeRead(
+                customer_message=ConversationMessageRead.model_validate(customer),
+                assistant_message=ConversationMessageRead.model_validate(assistant),
+            )
 
     if not await enforce_conversation_rate_limit(str(conversation_id), get_redis_client()):
         raise RateLimitExceededError()
 
-    # Fetched before this turn's message is recorded, so it's exactly the
-    # history the orchestrator should treat as "what came before now".
-    history = await conversation_service.get_transcript(conversation_id)
-
     customer_message = await conversation_service.record_message(
-        conversation_id, MessageRole.CUSTOMER, payload.content
+        conversation_id,
+        MessageRole.CUSTOMER,
+        payload.content,
+        intent={"request_id": str(payload.request_id)} if payload.request_id else {},
     )
     await conversation_service.touch_activity(conversation_id)
 
@@ -236,6 +260,9 @@ async def post_message(
         context.get("last_matched_product_ids")
     )
 
+    recent_products = await _load_recent_products(
+        catalog_service, conversation.tenant_id, context.get("last_matched_product_ids")
+    )
     plan = await ai_orchestrator.plan_turn(
         store_name=tenant.name,
         language=turn_language,
@@ -243,18 +270,68 @@ async def post_message(
         clarifications_so_far=clarifications_so_far,
         query=payload.content,
         history=history,
+        recent_products=recent_products,
     )
 
     # Accumulate any newly-stated preferences so both this turn's grounded
     # reply and every later turn's planning see the full picture.
+    if plan and plan.slots.get("category") and plan.slots["category"] != context.get("category"):
+        # A new product type should not inherit an unrelated size/style.
+        context = {k: v for k, v in context.items() if k not in ("size", "style", "occasion")}
     merged_context: dict = {**context, **(plan.slots if plan else {}), "language": turn_language}
 
     is_clarify = (
-        plan is not None and plan.action == "clarify" and clarifications_so_far < _MAX_CLARIFICATIONS
+        plan is not None
+        and plan.action == "clarify"
+        and clarifications_so_far < _MAX_CLARIFICATIONS
         and not references_recent_products
     )
 
-    if is_clarify:
+    cart_intent = {}
+    is_cart = bool(plan and plan.action == "add_to_cart")
+    if is_cart:
+        assert plan is not None
+        selected = next((p for p in recent_products if str(p.id) == plan.product_id), None)
+        matched_product_ids = [str(selected.id)] if selected else []
+        ai_generated = False  # factual transaction receipt, never fabricated by the LLM
+        if not selected or not _explicit_cart_request(payload.content):
+            reply_text = "Please name the product you want me to add to your cart."
+            if turn_language == "roman_urdu":
+                reply_text = "Kaunsa product cart mein daalna hai? Uska naam bata dein."
+            elif turn_language == "urdu":
+                reply_text = "کون سا پروڈکٹ کارٹ میں ڈالنا ہے؟ اس کا نام بتا دیں۔"
+        else:
+            try:
+                cart = None
+                cart_id = payload.cart_id or context.get("cart_id")
+                if cart_id:
+                    try:
+                        cart = await order_service.get_cart(conversation.tenant_id, UUID(str(cart_id)))
+                        if cart.status.value != "open":
+                            cart = None
+                    except NotFoundError:
+                        cart = None
+                if cart is None:
+                    cart = await order_service.create_cart(conversation.tenant_id, conversation_id)
+                await order_service.add_item(cart.id, selected.id, plan.quantity)
+                items = await order_service.list_cart_items(cart.id)
+                cart_intent = {"cart_id": str(cart.id), "cart_count": sum(i.quantity for i in items)}
+                merged_context["cart_id"] = str(cart.id)
+                receipt = f"{plan.quantity} × {selected.title} ({selected.currency} {selected.price} each)"
+                reply_text = f"Added {receipt} to your cart. Review the cart before confirming checkout."
+                if turn_language == "roman_urdu":
+                    reply_text = (
+                        f"{receipt} cart mein add ho gaya. Order confirm karne se pehle cart dekh lein."
+                    )
+                elif turn_language == "urdu":
+                    reply_text = f"{receipt} کارٹ میں شامل ہو گیا۔ آرڈر کی تصدیق سے پہلے کارٹ دیکھ لیں۔"
+            except ValidationError:
+                reply_text = "I couldn't add that quantity. Please check the available stock and your cart."
+                if turn_language == "roman_urdu":
+                    reply_text = (
+                        "Itni quantity add nahi ho saki. Available stock aur apna cart check kar lein."
+                    )
+    elif is_clarify:
         # Salesperson question turn: no catalog search, no product cards —
         # an empty matched_product_ids is what tells the widget to render
         # just the question (see apps/widget attachProductResults).
@@ -277,15 +354,11 @@ async def post_message(
             )
         if not found:
             try:
-                found = await search_service.search_products(
-                    conversation.tenant_id, search_query, top_k=_REPLY_PRODUCT_LIMIT
-                )
+                found = await search_service.search_products(conversation.tenant_id, search_query, top_k=20)
             except Exception as exc:  # noqa: BLE001 — an embeddings-provider outage (bad/missing
                 # key, rate limit, network) must degrade this turn to "no products found",
                 # never crash the whole chat with a 500.
-                logger.warning(
-                    "product_search_failed", conversation_id=str(conversation_id), error=str(exc)
-                )
+                logger.warning("product_search_failed", conversation_id=str(conversation_id), error=str(exc))
                 found = []
 
         # Respect a stated budget the way a salesperson would, but honestly.
@@ -297,12 +370,13 @@ async def post_message(
         # present them as if they were what was asked; instead offer the
         # real (over-budget) options as honest alternatives ("nothing under
         # X, but we do have these from Y").
+        found = [p for p in found if matches_preferences(p, merged_context)]
         budget = _extract_budget(merged_context.get("budget"))
         if budget is None:
-            matched_products = found
+            matched_products = found[:_REPLY_PRODUCT_LIMIT]
             exact_match = bool(found)
         elif found and float(found[0].price) <= budget:
-            matched_products = [p for p in found if float(p.price) <= budget]
+            matched_products = [p for p in found if float(p.price) <= budget][:_REPLY_PRODUCT_LIMIT]
             exact_match = True
         else:
             matched_products = found[:_REPLY_PRODUCT_LIMIT]
@@ -315,6 +389,7 @@ async def post_message(
             matched_products = await _find_alternatives(
                 search_service, conversation.tenant_id, merged_context, payload.content
             )
+            matched_products = [p for p in matched_products if matches_preferences(p, merged_context)]
             exact_match = False
 
         matched_product_ids = [str(p.id) for p in matched_products]
@@ -347,12 +422,15 @@ async def post_message(
             # Whether THIS turn's reply actually came from the LLM — false
             # only when it fell back to a non-LLM template/fallback.
             "ai_generated": ai_generated,
-            "action": "clarify" if is_clarify else "search",
+            "action": "add_to_cart" if cart_intent else ("clarify" if is_clarify or is_cart else "search"),
+            "request_id": str(payload.request_id) if payload.request_id else None,
+            **cart_intent,
         },
     )
 
     merged_context["last_query"] = payload.content
-    merged_context["last_matched_product_ids"] = matched_product_ids
+    if matched_product_ids:
+        merged_context["last_matched_product_ids"] = matched_product_ids
     await conversation_service.update_context(conversation_id, merged_context)
 
     return MessageExchangeRead(
