@@ -34,11 +34,17 @@ def main():
         started = call("POST", "/conversations?language=roman_urdu")
         cid = started["conversation"]["id"]
         cart_id = None
+        fallback_turns = []
 
         def turn(text):
             payload = {"content": text, "requestId": str(uuid4()), "cartId": cart_id}
             result = call("POST", f"/conversations/{cid}/messages", json=payload)
             assistant = result["assistantMessage"]
+            if (
+                not assistant["intent"].get("ai_generated")
+                and assistant["intent"].get("action") != "add_to_cart"
+            ):
+                fallback_turns.append(text)
             print(assistant["intent"].get("action"), assistant["content"][:450], flush=True)
             return result, payload
 
@@ -68,7 +74,7 @@ def main():
         assert unavailable["assistantMessage"]["intent"]["action"] != "add_to_cart"
         assert len(call("GET", f"/orders/carts/{cart_id}")["items"]) == 1
         print(
-            "PASS: eight conversational turns, catalog filtering, cart, stock rejection, request replay",
+            "PASS: eight API turns, catalog filtering, cart, stock rejection, request replay",
             flush=True,
         )
 
@@ -98,6 +104,10 @@ def main():
                 order["id"],
                 flush=True,
             )
+        assert not fallback_turns, (
+            f"AI quality check failed: {len(fallback_turns)} turns used fallback replies"
+        )
+        print("PASS: every non-transaction conversational reply was AI-generated", flush=True)
 
 
 if __name__ == "__main__":

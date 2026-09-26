@@ -294,7 +294,11 @@ async def post_message(
         selected = next((p for p in recent_products if str(p.id) == plan.product_id), None)
         matched_product_ids = [str(selected.id)] if selected else []
         ai_generated = False  # factual transaction receipt, never fabricated by the LLM
-        if not selected or not _explicit_cart_request(payload.content):
+        if (
+            not selected
+            or not matches_preferences(selected, merged_context)
+            or not _explicit_cart_request(payload.content)
+        ):
             reply_text = "Please name the product you want me to add to your cart."
             if turn_language == "roman_urdu":
                 reply_text = "Kaunsa product cart mein daalna hai? Uska naam bata dein."
@@ -352,6 +356,10 @@ async def post_message(
                 conversation.tenant_id,
                 context.get("last_matched_product_ids"),
             )
+            # A changed colour/size must trigger a fresh search, not remain
+            # trapped in the old recommendation set.
+            if not any(matches_preferences(p, merged_context) for p in found):
+                found = []
         if not found:
             try:
                 found = await search_service.search_products(conversation.tenant_id, search_query, top_k=20)

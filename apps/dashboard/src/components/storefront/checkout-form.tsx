@@ -40,14 +40,26 @@ export function CheckoutForm({ slug }: { slug: string }) {
   const [isPlacing, setIsPlacing] = useState(false);
 
   useEffect(() => {
-    getCart(slug)
-      .then(setCart)
-      .catch(() => setCart(null));
+    let active = true;
+    const refresh = () => { void getCart(slug).then((next) => {
+      if (active) setCart(next);
+    }).catch(() => { if (active) setCart(null); }); };
+    refresh();
+    window.addEventListener("zello:cart-changed", refresh);
+    return () => { active = false; window.removeEventListener("zello:cart-changed", refresh); };
   }, [slug]);
 
   async function placeOrder() {
+    if (isPlacing || !cart) return;
     setIsPlacing(true);
     try {
+      const latest = await getCart(slug);
+      if (!latest || JSON.stringify(latest.items) !== JSON.stringify(cart.items)) {
+        setCart(latest);
+        show("Your cart changed. Please review it before placing the order.", "error");
+        setIsPlacing(false);
+        return;
+      }
       const order = await checkout(slug, paymentMethod);
       emitCartChanged(0);
       router.replace(`/store/${slug}/order/${order.id}`);
@@ -107,6 +119,9 @@ export function CheckoutForm({ slug }: { slug: string }) {
 
       <div className="h-fit rounded-card border border-border bg-surface p-5 shadow-card">
         <h2 className="font-display text-base font-semibold text-ink">Your order</h2>
+        {cart.items.every((item) => item.productTitle.startsWith("DEMO ")) ? (
+          <p className="mt-2 text-sm text-ink-soft">Demo test order only — no real delivery will be arranged.</p>
+        ) : null}
         <ul className="mt-3 space-y-2">
           {cart.items.map((item) => (
             <li key={item.id} className="flex justify-between gap-3 text-sm">

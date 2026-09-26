@@ -205,6 +205,9 @@ class SqlAlchemyProductRepository(ProductRepository):
         model.images = entity.images
         model.attributes = entity.attributes
         await self._session.flush()
+        # updated_at is server-generated on UPDATE; async ORM code must
+        # explicitly refresh it before the synchronous entity mapper reads it.
+        await self._session.refresh(model)
         return _to_entity(model)
 
     async def delete(self, entity_id: UUID) -> None:

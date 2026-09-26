@@ -16,9 +16,13 @@ export function CartView({ slug }: { slug: string }) {
   const { show } = useToast();
 
   useEffect(() => {
-    getCart(slug)
-      .then(setCart)
-      .catch(() => setCart(null));
+    let active = true;
+    const refresh = () => { void getCart(slug).then((next) => {
+      if (active) setCart(next);
+    }).catch(() => { if (active) setCart(null); }); };
+    refresh();
+    window.addEventListener("zello:cart-changed", refresh);
+    return () => { active = false; window.removeEventListener("zello:cart-changed", refresh); };
   }, [slug]);
 
   function applyCart(next: CartDetail) {

@@ -24,9 +24,7 @@ class ChatMessage:
 
 class ChatProvider(ABC):
     @abstractmethod
-    async def complete(
-        self, messages: list[ChatMessage], *, max_tokens: int, temperature: float
-    ) -> str:
+    async def complete(self, messages: list[ChatMessage], *, max_tokens: int, temperature: float) -> str:
         """Returns the assistant's reply text. Raises on any provider-side
         failure (timeout, auth, rate limit) — callers (AIOrchestrator) are
         responsible for catching and falling back, not this method."""
@@ -38,9 +36,7 @@ class OpenAIChatProvider(ChatProvider):
         self._client = AsyncOpenAI(api_key=api_key, timeout=timeout_seconds)
         self._model = model
 
-    async def complete(
-        self, messages: list[ChatMessage], *, max_tokens: int, temperature: float
-    ) -> str:
+    async def complete(self, messages: list[ChatMessage], *, max_tokens: int, temperature: float) -> str:
         response = await self._client.chat.completions.create(
             model=self._model,
             messages=[{"role": m.role, "content": m.content} for m in messages],
@@ -61,14 +57,10 @@ class GeminiChatProvider(ChatProvider):
     def __init__(self, api_key: str, model: str, timeout_seconds: float) -> None:
         from google import genai
 
-        self._client = genai.Client(
-            api_key=api_key, http_options={"timeout": int(timeout_seconds * 1000)}
-        )
+        self._client = genai.Client(api_key=api_key, http_options={"timeout": int(timeout_seconds * 1000)})
         self._model = model
 
-    async def complete(
-        self, messages: list[ChatMessage], *, max_tokens: int, temperature: float
-    ) -> str:
+    async def complete(self, messages: list[ChatMessage], *, max_tokens: int, temperature: float) -> str:
         from google.genai import types
 
         system_instruction: str | None = None
@@ -90,6 +82,12 @@ class GeminiChatProvider(ChatProvider):
                 system_instruction=system_instruction,
                 max_output_tokens=max_tokens,
                 temperature=temperature,
+                # Short sales turns do not need adaptive thinking. Without
+                # this, Flash can spend the voice latency/token budget on
+                # internal reasoning and leave an incomplete spoken reply.
+                thinking_config=(
+                    types.ThinkingConfig(thinking_budget=0) if self._model == "gemini-2.5-flash" else None
+                ),
             ),
         )
         return (response.text or "").strip()
