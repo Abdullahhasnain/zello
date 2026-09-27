@@ -38,15 +38,14 @@ export default async function StorefrontLayout({
           The .voice.js bundle is the Phase 2+ build (text chat + mic/TTS);
           a Phase 1 tenant's real embed snippet would point at .text.js
           instead — see Widget Studio for that gating. */}
-      {/* No data-language: the widget then greets in the visitor's own
-          browser language, and switches per turn to whatever they actually
-          speak (see apps/widget/src/config.ts). Pin data-language only if a
-          store wants every visitor greeted in one fixed language. */}
+      {/* Voice-first Pakistani storefront; partner embeds retain their own defaults. */}
       <script
         src="/zello-widget.voice.js"
         data-tenant-slug={slug}
         data-api-base-url={API_BASE_URL}
         data-position="bottom-right"
+        data-language="roman_urdu"
+        data-auto-open="true"
         data-voice-mode={process.env.ZELLO_VOICE_MODE === "browser" ? "browser" : "auto"}
         async
       />

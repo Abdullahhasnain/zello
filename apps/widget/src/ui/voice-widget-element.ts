@@ -125,6 +125,8 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
   // Guards the greeting so it's spoken at most once, whether it fires
   // automatically (autoplay-allowed) or on the customer's first tap.
   private greetingStarted = false;
+  private readonly autoOpen: boolean;
+  private greetingButton: HTMLButtonElement | null = null;
 
   private voiceStyleEl!: HTMLStyleElement;
   private voiceStatusEl!: HTMLDivElement;
@@ -153,6 +155,7 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
     super(config);
     this.tenantSlug = config.tenantSlug;
     this.position = config.position;
+    this.autoOpen = config.autoOpen === true;
     this.lastReplyLanguage = config.language;
     // Free deployments can explicitly skip unavailable server STT/TTS.
     // Keep server-first behaviour for existing partner embeds by default.
@@ -169,6 +172,7 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
     this.addVoiceStyles();
     this.addVoiceControls();
     this.addHeaderControls();
+    if (this.autoOpen) this.setOpen(true, false);
     this.launcherButton.addEventListener("click", () =>
       this.handleLauncherToggled(),
     );
@@ -208,6 +212,15 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
    * prompt can show the SAME greeting text the chat panel itself would,
    * rather than a second hard-coded copy that could drift out of sync. */
   protected onBootstrapped(): void {
+    if (this.autoOpen) {
+      this.greetingText = this.messages.find((message) => message.role === "assistant")?.content ?? "";
+      if (this.voicePrefs.voiceEnabled && !this.voicePrefs.muted && this.greetingText) {
+        this.showGreetingButton();
+        // Attempt playback without bypassing browser autoplay restrictions.
+        this.startVoiceGreeting(false);
+      }
+      return;
+    }
     if (
       !this.voicePrefs.voiceEnabled ||
       hasShownProactivePrompt(this.tenantSlug)
@@ -247,14 +260,30 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
       this.greetingStarted ||
       !this.audioUnlocked ||
       !this.greetingText ||
-      this.isOpen ||
+      (this.autoOpen ? !this.isOpen : this.isOpen) ||
       !this.voicePrefs.voiceEnabled ||
       this.voicePrefs.muted
     ) {
       return;
     }
-    this.showProactivePrompt(this.greetingText);
+    if (!this.autoOpen) this.showProactivePrompt(this.greetingText);
     this.startVoiceGreeting(false);
+  }
+
+  private showGreetingButton(): void {
+    if (this.greetingButton) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Shuru karein — greeting sunein";
+    button.className = "zello-send-button";
+    button.addEventListener("click", () => {
+      if (!this.voicePrefs.voiceEnabled || this.voicePrefs.muted) return;
+      this.stopSpeech();
+      this.greetingStarted = false;
+      this.startVoiceGreeting(false);
+    });
+    this.panel.insertBefore(button, this.voiceStatusEl);
+    this.greetingButton = button;
   }
 
   /** Whether the browser will let us play the greeting audio without a
@@ -300,6 +329,8 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
     this.setVoiceState("speaking");
     void this.speakText(this.greetingText, this.lastReplyLanguage, {
       onEnd: () => {
+        this.greetingButton?.remove();
+        this.greetingButton = null;
         if (this.voiceState === "speaking") {
           this.setVoiceState("idle");
         }
@@ -308,6 +339,10 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
         }
       },
       onError: () => {
+        if (this.autoOpen) {
+          this.greetingStarted = false;
+          this.showGreetingButton();
+        }
         // Autoplay was blocked after all, or synthesis failed — no problem,
         // the greeting is still on screen; just listen if they're engaged.
         if (this.voiceState === "speaking") {

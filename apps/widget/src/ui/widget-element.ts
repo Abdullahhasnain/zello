@@ -303,11 +303,11 @@ export class ZelloWidgetElement extends HTMLElement {
 
   // --- Rendering ---
 
-  protected setOpen(open: boolean): void {
+  protected setOpen(open: boolean, focus = true): void {
     this.isOpen = open;
     this.panel.classList.toggle("zello-open", open);
     if (open) {
-      this.inputEl.focus();
+      if (focus) this.inputEl.focus();
       this.scrollToBottom();
     }
   }

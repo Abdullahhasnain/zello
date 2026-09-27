@@ -19,6 +19,7 @@ from app.modules.conversations.dependencies import (
     get_conversation_service_for_customer,
     get_conversation_service_for_store,
 )
+from app.modules.conversations.language import response_language
 from app.modules.conversations.product_matching import matches_preferences
 from app.modules.conversations.reply_composer import compose_greeting
 from app.modules.conversations.schemas import (
@@ -252,8 +253,14 @@ async def post_message(
     context = conversation.context or {}
 
     detected = detect_language(payload.content)
-    prior_language = str(context.get("language") or conversation.language or "roman_urdu")
-    turn_language = detected if detected != "english" else prior_language
+    prior_language = context.get("response_language")
+    if not prior_language:
+        # Recover old sessions from their first customer turn, not an STT-induced switch.
+        first_customer = next((m for m in history if m.role == MessageRole.CUSTOMER), None)
+        prior_language = (
+            detect_language(first_customer.content) if first_customer else (conversation.language or detected)
+        )
+    turn_language = response_language(payload.content, str(prior_language))
 
     clarifications_so_far = int(context.get("clarification_count", 0) or 0)
     references_recent_products = _references_recent_products(payload.content) and bool(
@@ -278,7 +285,12 @@ async def post_message(
     if plan and plan.slots.get("category") and plan.slots["category"] != context.get("category"):
         # A new product type should not inherit an unrelated size/style.
         context = {k: v for k, v in context.items() if k not in ("size", "style", "occasion")}
-    merged_context: dict = {**context, **(plan.slots if plan else {}), "language": turn_language}
+    merged_context: dict = {
+        **context,
+        **(plan.slots if plan else {}),
+        "language": turn_language,
+        "response_language": turn_language,
+    }
 
     is_clarify = (
         plan is not None
