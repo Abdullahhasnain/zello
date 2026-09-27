@@ -194,6 +194,7 @@ export class ZelloWidgetElement extends HTMLElement {
         this.messages = cachedMessages;
         this.renderMessages();
         this.onBootstrapped();
+        window.dispatchEvent(new CustomEvent("zello:agent-ready", { detail: { tenantSlug: this.config.tenantSlug } }));
         return;
       }
 
@@ -206,6 +207,7 @@ export class ZelloWidgetElement extends HTMLElement {
       this.apiClient.setCachedMessages(this.messages);
       this.renderMessages();
       this.onBootstrapped();
+      window.dispatchEvent(new CustomEvent("zello:agent-ready", { detail: { tenantSlug: this.config.tenantSlug } }));
     } catch (error) {
       this.renderError(
         "Sorry, we couldn't connect right now. Please refresh the page and try again.",
