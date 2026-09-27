@@ -31,7 +31,7 @@ _PRICE_LINE = {
 
 _DEFAULT_GREETING = {
     "english": "Hello! I'm your shopping assistant. How can I help you today?",
-    "roman_urdu": "Assalam o Alaikum! Main Zello AI hoon. Aaj main aapki kya madad kar sakta hoon?",
+    "roman_urdu": "Assalam o Alaikum! Main Zello hoon. Aap kya dhoond rahe hain?",
     "urdu": "السلام علیکم! میں Zello AI ہوں۔ آج میں آپ کی کیا مدد کر سکتا ہوں؟",
 }
 

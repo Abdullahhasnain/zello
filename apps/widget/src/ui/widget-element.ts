@@ -76,6 +76,11 @@ export class ZelloWidgetElement extends HTMLElement {
 
   connectedCallback(): void {
     this.buildDom();
+    this.addEventListener("zello:presentation", () => {
+      const inline = this.hasAttribute("data-inline");
+      this.panel.setAttribute("role", inline ? "region" : "dialog");
+      this.setOpen(inline, false);
+    });
 
     // Apply any cached branding immediately — a returning visitor's widget
     // is themed correctly on the very first paint, before bootstrap()'s
@@ -106,8 +111,8 @@ export class ZelloWidgetElement extends HTMLElement {
 
     this.panel = document.createElement("div");
     this.panel.className = `zello-panel zello-position-${this.config.position}`;
-    this.panel.setAttribute("role", "dialog");
-    this.panel.setAttribute("aria-label", "Chat with us");
+    this.panel.setAttribute("role", this.hasAttribute("data-inline") ? "region" : "dialog");
+    this.panel.setAttribute("aria-label", "Zello AI sales agent");
     this.headerEl = this.buildHeader();
     this.panel.appendChild(this.headerEl);
 
@@ -116,6 +121,17 @@ export class ZelloWidgetElement extends HTMLElement {
     this.panel.appendChild(this.messagesEl);
 
     this.panel.appendChild(this.buildInputRow());
+    if (this.config.storefrontPath) {
+      const actions = document.createElement("nav");
+      actions.className = "zello-shopping-links";
+      for (const [label, suffix] of [["Review cart", "/cart"], ["Checkout", "/checkout"]]) {
+        const link = document.createElement("a");
+        link.textContent = label;
+        link.href = `${this.config.storefrontPath}${suffix}`;
+        actions.appendChild(link);
+      }
+      this.panel.appendChild(actions);
+    }
     this.shadow.appendChild(this.panel);
   }
 
@@ -125,7 +141,7 @@ export class ZelloWidgetElement extends HTMLElement {
 
     this.headerTitleEl = document.createElement("div");
     this.headerTitleEl.className = "zello-header-title";
-    this.headerTitleEl.textContent = "Chat with us";
+    this.headerTitleEl.textContent = "Zello AI · Sales Agent";
 
     const closeButton = document.createElement("button");
     closeButton.className = "zello-close-button";
@@ -145,7 +161,8 @@ export class ZelloWidgetElement extends HTMLElement {
     this.inputEl = document.createElement("input");
     this.inputEl.className = "zello-input";
     this.inputEl.type = "text";
-    this.inputEl.placeholder = "Type a message...";
+    this.inputEl.placeholder = "Kya chahiye? Budget, colour aur size batayein…";
+    this.inputEl.setAttribute("aria-label", "Message Zello");
     this.inputEl.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
@@ -323,6 +340,7 @@ export class ZelloWidgetElement extends HTMLElement {
 
   private renderMessages(): void {
     this.messagesEl.innerHTML = "";
+    const latestProducts = [...this.messages].reverse().find((message) => message.products?.length);
     for (const bubble of this.messages) {
       const el = document.createElement("div");
       el.className = `zello-bubble zello-bubble-${bubble.role === "customer" ? "customer" : "assistant"}`;
@@ -333,10 +351,36 @@ export class ZelloWidgetElement extends HTMLElement {
       this.messagesEl.appendChild(el);
 
       if (bubble.products && bubble.products.length > 0) {
-        this.messagesEl.appendChild(buildProductRow(bubble.products));
+        const actionable = bubble === latestProducts && !this.isSending;
+        this.messagesEl.appendChild(buildProductRow(bubble.products, actionable ? (product) => {
+          this.sendSuggestedMessage(`${product.title} ka ek piece cart mein add karo.`);
+        } : undefined));
+        if (actionable) {
+          const actions = document.createElement("div");
+          actions.className = "zello-suggestions";
+          const prompts = [
+            ["Recommend for me", "In options mein meri zaroorat aur budget ke liye kaunsa behtar hai? Wajah bhi batao."],
+            ...(bubble.products.length > 1 ? [["Compare options", "In options ko price aur available features ke hisaab se compare karo."]] : []),
+          ];
+          for (const [label, prompt] of prompts) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "zello-action";
+            button.textContent = label!;
+            button.addEventListener("click", () => this.sendSuggestedMessage(prompt!));
+            actions.appendChild(button);
+          }
+          this.messagesEl.appendChild(actions);
+        }
       }
     }
     this.scrollToBottom();
+  }
+
+  private sendSuggestedMessage(content: string): void {
+    if (this.isSending) return;
+    this.inputEl.value = content;
+    void this.handleSend();
   }
 
   private renderTypingIndicator(show: boolean): void {

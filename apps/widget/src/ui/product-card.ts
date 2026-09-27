@@ -9,18 +9,18 @@ import type { StorefrontProduct } from "../types";
  * whatever appears here is exactly what `/catalog/storefront/products/{id}`
  * returned, nothing composed or guessed by the model.
  */
-export function buildProductRow(products: StorefrontProduct[]): HTMLDivElement {
+export function buildProductRow(products: StorefrontProduct[], onAdd?: (product: StorefrontProduct) => void): HTMLDivElement {
   const row = document.createElement("div");
   row.className = "zello-product-row";
 
   for (const product of products) {
-    row.appendChild(buildProductCard(product));
+    row.appendChild(buildProductCard(product, onAdd));
   }
 
   return row;
 }
 
-function buildProductCard(product: StorefrontProduct): HTMLDivElement {
+function buildProductCard(product: StorefrontProduct, onAdd?: (product: StorefrontProduct) => void): HTMLDivElement {
   const card = document.createElement("div");
   card.className = "zello-product-card";
 
@@ -47,6 +47,16 @@ function buildProductCard(product: StorefrontProduct): HTMLDivElement {
   price.className = "zello-product-price";
   price.textContent = formatPrice(product.price, product.currency);
   card.appendChild(price);
+  if (onAdd) {
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "zello-action";
+    add.textContent = "Add to cart";
+    add.setAttribute("aria-label", `Add ${product.title} to cart`);
+    add.disabled = product.status !== "active" || product.stockQty <= 0;
+    add.addEventListener("click", () => onAdd(product));
+    card.appendChild(add);
+  }
 
   if (product.status === "out_of_stock" || product.stockQty <= 0) {
     const badge = document.createElement("div");

@@ -60,7 +60,7 @@ _MAX_CLARIFICATIONS = 2
 
 _FOLLOW_UP_REFERENCE = re.compile(
     r"\b(this|that|these|those|it|one|ones|ye|yeh|woh|wo|wala|wali|walay|"
-    r"available|cheaper|sasta|sasti|یہ|وہ|والا|سستا)\b",
+    r"available|cheaper|sasta|sasti|options|compare|recommend|یہ|وہ|والا|سستا)\b",
     re.IGNORECASE,
 )
 

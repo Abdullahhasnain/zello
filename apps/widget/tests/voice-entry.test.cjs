@@ -13,7 +13,7 @@ const proto = scope.exports.ZelloVoiceWidgetElement.prototype;
 
 test('auto-open entry tries greeting without opening microphone', () => {
   const calls = [];
-  const widget = { autoOpen: true, messages: [{role: 'assistant', content: 'Salam'}],
+  const widget = { hasMountTarget: () => false, autoOpen: true, messages: [{role: 'assistant', content: 'Salam'}],
     voicePrefs: {voiceEnabled: true, muted: false},
     showGreetingButton: () => calls.push('fallback-button'),
     startVoiceGreeting: (listen) => calls.push(['greet', listen]) };
@@ -24,7 +24,7 @@ test('auto-open entry tries greeting without opening microphone', () => {
 
 test('automatic greeting respects saved mute and voice off', () => {
   for (const voicePrefs of [{voiceEnabled: true, muted: true}, {voiceEnabled: false, muted: false}]) {
-    proto.onBootstrapped.call({autoOpen: true, messages: [{role:'assistant',content:'Salam'}], voicePrefs,
+    proto.onBootstrapped.call({hasMountTarget: () => false, autoOpen: true, messages: [{role:'assistant',content:'Salam'}], voicePrefs,
       showGreetingButton: () => assert.fail('must remain silent')});
   }
 });

@@ -8,6 +8,7 @@
 // zello-widget.text.js based on that entitlement.
 
 import { loadWidgetConfig } from "./config";
+import { mountWidget } from "./core/mount";
 import { ZelloVoiceWidgetElement } from "./ui/voice-widget-element";
 
 customElements.define("zello-widget", ZelloVoiceWidgetElement);
@@ -19,7 +20,7 @@ function mount(): void {
 
   const config = loadWidgetConfig();
   const widget = new ZelloVoiceWidgetElement(config);
-  document.body.appendChild(widget);
+  mountWidget(widget, config);
 }
 
 if (document.readyState === "loading") {

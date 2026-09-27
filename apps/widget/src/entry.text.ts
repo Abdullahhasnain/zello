@@ -5,6 +5,7 @@
 // voice or autonomous checkout.
 
 import { loadWidgetConfig } from "./config";
+import { mountWidget } from "./core/mount";
 import { ZelloWidgetElement } from "./ui/widget-element";
 
 customElements.define("zello-widget", ZelloWidgetElement);
@@ -19,7 +20,7 @@ function mount(): void {
   // would call the zero-argument path) so the config reaches the element
   // before connectedCallback runs — see ui/widget-element.ts.
   const widget = new ZelloWidgetElement(config);
-  document.body.appendChild(widget);
+  mountWidget(widget, config);
 }
 
 if (document.readyState === "loading") {

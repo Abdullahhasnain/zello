@@ -172,7 +172,7 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
     this.addVoiceStyles();
     this.addVoiceControls();
     this.addHeaderControls();
-    if (this.autoOpen) this.setOpen(true, false);
+    if (this.autoOpen && (!this.hasMountTarget() || this.hasAttribute("data-inline"))) this.setOpen(true, false);
     this.launcherButton.addEventListener("click", () =>
       this.handleLauncherToggled(),
     );
@@ -212,6 +212,7 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
    * prompt can show the SAME greeting text the chat panel itself would,
    * rather than a second hard-coded copy that could drift out of sync. */
   protected onBootstrapped(): void {
+    if (this.hasMountTarget() && !this.hasAttribute("data-inline")) return;
     if (this.autoOpen) {
       this.greetingText = this.messages.find((message) => message.role === "assistant")?.content ?? "";
       if (this.voicePrefs.voiceEnabled && !this.voicePrefs.muted && this.greetingText) {
@@ -270,12 +271,16 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
     this.startVoiceGreeting(false);
   }
 
+  private hasMountTarget(): boolean {
+    return this.parentElement?.id === "zello-agent-stage";
+  }
+
   private showGreetingButton(): void {
     if (this.greetingButton) return;
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = "Shuru karein — greeting sunein";
-    button.className = "zello-send-button";
+    button.className = "zello-greeting-button";
     button.addEventListener("click", () => {
       if (!this.voicePrefs.voiceEnabled || this.voicePrefs.muted) return;
       this.stopSpeech();

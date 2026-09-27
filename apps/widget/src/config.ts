@@ -20,6 +20,8 @@ export interface WidgetConfig {
   position: "bottom-right" | "bottom-left";
   voiceMode?: "auto" | "browser";
   autoOpen?: boolean;
+  mountTarget?: string;
+  storefrontPath?: string;
 }
 
 const DEFAULT_API_BASE_URL = "https://api.zello.ai/api/v1";
@@ -82,5 +84,7 @@ export function loadWidgetConfig(): WidgetConfig {
     position: position === "bottom-left" ? "bottom-left" : "bottom-right",
     voiceMode: script?.dataset.voiceMode === "browser" ? "browser" : "auto",
     autoOpen: script?.dataset.autoOpen === "true",
+    mountTarget: script?.dataset.mountTarget,
+    storefrontPath: script?.dataset.storefrontPath?.startsWith("/store/") ? script.dataset.storefrontPath : undefined,
   };
 }

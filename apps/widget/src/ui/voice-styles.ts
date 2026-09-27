@@ -9,6 +9,14 @@
  */
 export function buildVoiceStyles(): string {
   return `
+    .zello-greeting-button {
+      margin: 8px 16px; padding: 12px 16px; border: none; border-radius: 12px;
+      background: var(--zello-primary); color: white; cursor: pointer; font-weight: 600;
+    }
+    :host([data-inline]) .zello-mic-button {
+      width: 52px; height: 52px; background: #26392f; color: white;
+    }
+    :host([data-inline]) .zello-mic-button.zello-mic-listening { background: #d64545; }
     .zello-mic-button,
     .zello-pause-button {
       flex: 0 0 auto;

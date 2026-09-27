@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { TenantPublic } from "@zello-ai/types";
 import { StorefrontHeader } from "@/components/storefront/storefront-header";
+import { AgentStage } from "@/components/storefront/agent-stage";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
@@ -26,6 +27,7 @@ export default async function StorefrontLayout({
   return (
     <div className="min-h-dvh bg-bg">
       <StorefrontHeader slug={slug} storeName={store.name} primaryColor={store.branding.primaryColor} />
+      <AgentStage slug={slug} />
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
       <footer className="border-t border-border py-6">
         <p className="text-center text-xs text-ink-faint">
@@ -46,6 +48,8 @@ export default async function StorefrontLayout({
         data-position="bottom-right"
         data-language="roman_urdu"
         data-auto-open="true"
+        data-mount-target="zello-agent-stage"
+        data-storefront-path={`/store/${slug}`}
         data-voice-mode={process.env.ZELLO_VOICE_MODE === "browser" ? "browser" : "auto"}
         async
       />

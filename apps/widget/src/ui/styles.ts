@@ -288,5 +288,43 @@ export function buildStyles(primaryColor: string): string {
       padding: 2px 5px;
       border-radius: 4px;
     }
+    .zello-action {
+      border: 1px solid #dedbd4; border-radius: 10px; padding: 9px 12px;
+      background: #faf8f5; color: var(--zello-ink); cursor: pointer;
+      font: inherit; font-size: 12px; font-weight: 600;
+    }
+    .zello-action:hover { border-color: var(--zello-primary); }
+    .zello-action:disabled { opacity: .45; cursor: not-allowed; }
+    .zello-suggestions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .zello-shopping-links { display: flex; gap: 12px; padding: 10px 16px; border-top: 1px solid #eee; }
+    .zello-shopping-links a { color: var(--zello-primary); font-size: 13px; font-weight: 600; }
+    :host([data-inline]) { display: block; width: 100%; }
+    :host([data-inline]) .zello-launcher,
+    :host([data-inline]) .zello-close-button { display: none; }
+    :host([data-inline]) .zello-panel {
+      position: relative; inset: auto; z-index: auto; width: 100%; max-width: 100%;
+      height: min(650px, 76dvh); min-height: 460px; max-height: none;
+      opacity: 1; pointer-events: auto; transform: none; border-radius: 24px;
+      border: 1px solid #e5dfd6; box-shadow: 0 12px 48px #3025180c;
+    }
+    :host([data-inline]) .zello-header { padding: 18px 22px; background: #26392f; }
+    :host([data-inline]) .zello-header-title { flex: 1; font-size: 17px; }
+    :host([data-inline]) .zello-messages { padding: 22px; min-height: 0; background: #fdfcf9; }
+    :host([data-inline]) .zello-bubble { font-size: 15px; line-height: 1.6; max-width: 88%; }
+    :host([data-inline]) .zello-bubble-assistant { background: #f0eee7; }
+    :host([data-inline]) .zello-product-row { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); overflow: visible; gap: 12px; }
+    :host([data-inline]) .zello-product-card { width: auto; padding: 12px; gap: 10px; border-color: #e4e0d8; border-radius: 16px; }
+    :host([data-inline]) .zello-product-title { display: block; font-size: 14px; line-height: 1.4; }
+    :host([data-inline]) .zello-product-price { font-size: 17px; }
+    :host([data-inline]) .zello-product-image { height: 80px; }
+    :host([data-inline]) .zello-input-row { align-items: center; padding: 16px; }
+    :host([data-inline]) .zello-input { min-width: 0; padding: 14px; border-radius: 14px; }
+    :host([data-inline]) .zello-shopping-links { justify-content: flex-end; padding: 12px 20px; }
+    @media (max-width: 480px) {
+      :host([data-inline]) .zello-panel { min-height: 420px; height: 70dvh; border-radius: 18px; }
+      :host([data-inline]) .zello-messages { padding: 12px; }
+      :host([data-inline]) .zello-product-row { grid-template-columns: 1fr; }
+      :host([data-inline]) .zello-input-row { gap: 5px; padding: 10px; }
+    }
   `;
 }
