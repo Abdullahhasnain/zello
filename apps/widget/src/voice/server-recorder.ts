@@ -1,5 +1,10 @@
 import type { VoiceErrorCode } from "./types";
 
+export interface InterruptibleServerSpeaker {
+  readonly isPlaying: boolean;
+  stopAudio(): void;
+}
+
 export interface ServerRecorderCallbacks {
   onAudio: (audio: Blob) => void;
   onError: (code: VoiceErrorCode, message: string) => void;
@@ -27,6 +32,8 @@ export class ServerVoiceRecorder {
   private animationFrame: number | null = null;
   private timeout: ReturnType<typeof setTimeout> | null = null;
   private aborted = false;
+
+  constructor(private readonly serverSpeaker?: InterruptibleServerSpeaker) {}
 
   static isSupported(): boolean {
     return (
@@ -146,6 +153,9 @@ export class ServerVoiceRecorder {
       const rms = Math.sqrt(sum / samples.length);
       const now = performance.now();
       if (rms >= SPEECH_THRESHOLD) {
+        if (!speechStarted && this.serverSpeaker?.isPlaying) {
+          this.serverSpeaker.stopAudio();
+        }
         speechStarted = true;
         lastSpeechAt = now;
       } else if (

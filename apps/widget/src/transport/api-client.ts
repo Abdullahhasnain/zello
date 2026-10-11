@@ -96,10 +96,24 @@ export class ApiClient {
       },
     );
     const intent = result.assistantMessage.intent;
-    if (intent.action === "add_to_cart" && typeof intent.cart_id === "string") {
+    // The typed action is emitted only after the backend's add_item call
+    // succeeds. Keep the legacy intent check as a compatibility fallback for
+    // already-deployed API versions.
+    const addedToCart = result.action?.type === "ADD_TO_CART" || intent.action === "add_to_cart";
+    if (addedToCart && typeof intent.cart_id === "string") {
+      const actionPayload = result.action?.type === "ADD_TO_CART" ? result.action.payload : undefined;
       window.localStorage.setItem(`zello.storefront.cart.${this.tenantSlug}`, intent.cart_id);
       window.dispatchEvent(new CustomEvent("zello:cart-changed", {
-        detail: { count: intent.cart_count, slug: this.tenantSlug },
+        // `count` and `slug` are the original public event contract. The
+        // completed action fields are additive so a host store can update its
+        // own product-level cart state without parsing assistant prose.
+        detail: {
+          count: intent.cart_count,
+          slug: this.tenantSlug,
+          productId: actionPayload?.productId,
+          quantity: actionPayload?.quantity,
+          title: actionPayload?.title,
+        },
       }));
     }
     return result;
@@ -127,7 +141,7 @@ export class ApiClient {
   }
 
   async synthesizeSpeech(text: string, language: string): Promise<Blob> {
-    const response = await this.requestResponse("/voice/speech", {
+    const response = await this.requestResponse("/voice/tts", {
       method: "POST",
       body: JSON.stringify({ text, language }),
     });

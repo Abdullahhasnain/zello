@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+
 from app.modules.voice.provider import VoiceProvider
 from app.shared.exceptions import ValidationError
 
@@ -25,8 +27,15 @@ _SPEECH_INSTRUCTIONS = {
 
 
 class VoiceService:
-    def __init__(self, provider: VoiceProvider, *, max_audio_bytes: int) -> None:
+    def __init__(
+        self,
+        provider: VoiceProvider,
+        *,
+        max_audio_bytes: int,
+        tts_provider: VoiceProvider | None = None,
+    ) -> None:
         self._provider = provider
+        self._tts_provider = tts_provider or provider
         self._max_audio_bytes = max_audio_bytes
 
     async def transcribe(self, audio: bytes, content_type: str) -> str:
@@ -44,9 +53,26 @@ class VoiceService:
             content_type=normalized_type,
         )
 
-    async def synthesize(self, text: str, language: str) -> bytes:
+    async def synthesize(self, text: str, language: str, voice: str | None = None) -> bytes:
+        cleaned, instructions = self._prepare_speech(text, language)
+        if voice is None:
+            return await self._tts_provider.synthesize(cleaned, instructions=instructions)
+        return await self._tts_provider.synthesize(cleaned, instructions=instructions, voice=voice)
+
+    async def stream_synthesize(
+        self, text: str, language: str, voice: str | None = None
+    ) -> AsyncIterator[bytes]:
+        cleaned, instructions = self._prepare_speech(text, language)
+        if voice is None:
+            stream = self._tts_provider.stream_synthesize(cleaned, instructions=instructions)
+        else:
+            stream = self._tts_provider.stream_synthesize(cleaned, instructions=instructions, voice=voice)
+        async for chunk in stream:
+            yield chunk
+
+    @staticmethod
+    def _prepare_speech(text: str, language: str) -> tuple[str, str]:
         cleaned = text.strip()
         if not cleaned:
             raise ValidationError("Speech text cannot be empty.")
-        instructions = _SPEECH_INSTRUCTIONS.get(language, _SPEECH_INSTRUCTIONS["english"])
-        return await self._provider.synthesize(cleaned, instructions=instructions)
+        return cleaned, _SPEECH_INSTRUCTIONS.get(language, _SPEECH_INSTRUCTIONS["english"])

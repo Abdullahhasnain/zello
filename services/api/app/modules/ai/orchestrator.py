@@ -25,7 +25,7 @@ from app.modules.ai.prompts import (
     format_product_context,
 )
 from app.modules.ai.provider import ChatMessage, ChatProvider
-from app.modules.conversations.reply_composer import compose_search_reply
+from app.modules.conversations.reply_composer import compose_comparison_reply, compose_search_reply
 
 logger = get_logger(__name__)
 
@@ -144,6 +144,7 @@ class AIOrchestrator:
         history: list[ConversationMessage],
         known_preferences: str = "none yet",
         exact_match: bool = True,
+        comparison: bool = False,
     ) -> AIReply:
         """`history` should be the transcript BEFORE this turn's customer
         message (the router records that message first, then calls this) —
@@ -154,7 +155,12 @@ class AIOrchestrator:
         alternatives to an unavailable request, so it frames them honestly
         (see build_system_prompt)."""
         if self._provider is None:
-            return AIReply(compose_search_reply(language, query, products), ai_generated=False)
+            text = (
+                compose_comparison_reply(language, products)
+                if comparison
+                else compose_search_reply(language, query, products)
+            )
+            return AIReply(text, ai_generated=False)
 
         system_prompt = build_system_prompt(
             store_name=store_name,
@@ -162,11 +168,12 @@ class AIOrchestrator:
             language=language,
             known_preferences=known_preferences,
             exact_match=exact_match,
+            comparison=comparison,
         )
         messages = [
             ChatMessage(
                 role="system",
-                content=f"{system_prompt}\n\n{format_product_context(products)}",
+                content=f"{system_prompt}\n\n{format_product_context(products, comparison=comparison)}",
             )
         ]
         for turn in history[-self._history_turns :]:
@@ -185,7 +192,12 @@ class AIOrchestrator:
             # template, it must never surface as a 500 to a shopper mid-chat.
             logger.warning("ai_reply_failed", error=str(exc))
 
-        return AIReply(compose_search_reply(language, query, products), ai_generated=False)
+        text = (
+            compose_comparison_reply(language, products)
+            if comparison
+            else compose_search_reply(language, query, products)
+        )
+        return AIReply(text, ai_generated=False)
 
 
 def _parse_plan(raw: str) -> TurnPlan | None:

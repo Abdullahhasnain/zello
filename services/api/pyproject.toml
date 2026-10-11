@@ -23,6 +23,7 @@ httpx = "^0.28.1"
 structlog = "^24.4.0"
 python-multipart = "^0.0.12"
 openai = "^1.51.0"
+edge-tts = "^7.2.8"
 # Alternative AI_PROVIDER — Gemini's free tier covers both chat and
 # embeddings, unlike OpenAI's pay-as-you-go-only API. See
 # app/modules/ai/provider.py and app/modules/search/embedding_provider.py.

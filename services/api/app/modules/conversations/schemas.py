@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import Field
@@ -37,6 +38,19 @@ class PostMessageRequest(CamelModel):
     request_id: UUID | None = None
 
 
+class AddToCartActionPayload(CamelModel):
+    """Additive action data for a completed cart mutation, not an AI plan."""
+
+    product_id: UUID
+    quantity: int = Field(ge=1, le=20)
+    title: str
+
+
+class ConversationActionRead(CamelModel):
+    type: Literal["ADD_TO_CART"]
+    payload: AddToCartActionPayload
+
+
 class MessageExchangeRead(CamelModel):
     """Response for POST /conversations/{id}/messages — both halves of the
     turn in one round trip, so the widget doesn't have to poll for the
@@ -44,6 +58,9 @@ class MessageExchangeRead(CamelModel):
 
     customer_message: ConversationMessageRead
     assistant_message: ConversationMessageRead
+    # Optional and top-level so existing consumers of the two-message response
+    # remain compatible. Present only after a cart write has succeeded.
+    action: ConversationActionRead | None = None
 
 
 class ConversationStartResponse(CamelModel):

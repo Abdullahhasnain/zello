@@ -17,6 +17,41 @@ export function isSpeechSynthesisSupported(): boolean {
   return typeof window !== "undefined" && "speechSynthesis" in window;
 }
 
+/**
+ * Makes assistant copy sound natural when it is read by the Web Speech API.
+ * The backend already formats catalog prices, but this is a last line of
+ * defence for LLM copy, old conversation messages, or any third-party text.
+ */
+export function cleanTextForSpeech(text: string): string {
+  const spokenPrices = text.replace(
+    /(?:(\$|£|€)\s*|(PKR|USD|Rs\.?)\s+)(\d[\d,]*)(?:\.(\d+))?/gi,
+    (_match, symbol: string | undefined, code: string | undefined, whole: string, fraction?: string) => {
+      const currency = (symbol ?? code ?? "").toUpperCase();
+      const unit =
+        currency === "$" || currency === "USD"
+          ? "dollars"
+          : currency === "£"
+            ? "pounds"
+            : currency === "€"
+              ? "euros"
+              : "rupees";
+      const minorUnit = currency === "PKR" || currency.startsWith("RS") ? "paisa" : "cents";
+      const minorAmount = fraction ? Number(`${fraction}00`.slice(0, 2)) : 0;
+      const cleanWhole = whole.replace(/,/g, "");
+
+      return minorAmount > 0
+        ? `${cleanWhole} ${unit} and ${minorAmount} ${minorUnit}`
+        : `${cleanWhole} ${unit}`;
+    },
+  );
+
+  return spokenPrices
+    .replace(/[*_`~]/g, "")
+    .replace(/#+/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function selectVoice(locale: string): SpeechSynthesisVoice | null {
   const voices = window.speechSynthesis.getVoices();
   if (voices.length === 0) return null;
@@ -54,7 +89,8 @@ export class VoiceSpeaker {
       callbacks.onError("not-supported", "Voice playback isn't supported in this browser.");
       return;
     }
-    if (!text.trim()) {
+    const textForSpeech = cleanTextForSpeech(text);
+    if (!textForSpeech) {
       callbacks.onEnd();
       return;
     }
@@ -65,7 +101,7 @@ export class VoiceSpeaker {
     window.speechSynthesis.cancel();
     await ensureVoicesLoaded();
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    const utterance = new SpeechSynthesisUtterance(textForSpeech);
     utterance.lang = locale;
     const voice = selectVoice(locale);
     if (voice) {

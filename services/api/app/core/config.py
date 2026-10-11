@@ -93,6 +93,10 @@ class Settings(BaseSettings):
     # for planning/replies while still using OpenAI's audio endpoints for
     # multilingual transcription and speech synthesis.
     VOICE_ENABLED: bool = True
+    # Edge TTS is keyless and uses Microsoft's multilingual neural voices.
+    # Keep OpenAI selectable for deployments that explicitly need it.
+    VOICE_TTS_PROVIDER: str = "edge"
+    VOICE_EDGE_TTS_VOICE: str = "en-US-AvaMultilingualNeural"
     VOICE_STT_MODEL: str = "gpt-4o-mini-transcribe"
     VOICE_TTS_MODEL: str = "gpt-4o-mini-tts"
     VOICE_TTS_VOICE: str = "marin"

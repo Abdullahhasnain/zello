@@ -43,9 +43,21 @@ export interface ConversationStartResponse {
   branding: TenantBrandingRead;
 }
 
+/** A completed backend action, never an LLM suggestion. */
+export interface AddToCartAction {
+  type: "ADD_TO_CART";
+  payload: {
+    productId: string;
+    quantity: number;
+    title: string;
+  };
+}
+
 export interface MessageExchangeResponse {
   customerMessage: ConversationMessage;
   assistantMessage: ConversationMessage;
+  /** Optional/additive: absent for ordinary conversation turns. */
+  action?: AddToCartAction | null;
 }
 
 export interface VoiceTranscriptionResponse {
@@ -87,4 +99,6 @@ export interface ChatBubble {
    * assistant's matched products have been fetched — absent while that
    * fetch is still in flight or when the turn matched no products. */
   products?: StorefrontProduct[];
+  /** Lets this completed cart action survive the widget's local transcript cache. */
+  action?: AddToCartAction;
 }

@@ -12,3 +12,7 @@ class TranscriptionRead(CamelModel):
 class SpeechCreate(CamelModel):
     text: str = Field(min_length=1, max_length=2000)
     language: Literal["english", "roman_urdu", "urdu"] = "roman_urdu"
+    voice: Literal[
+        "en-US-AvaMultilingualNeural",
+        "en-US-AndrewMultilingualNeural",
+    ] | None = None

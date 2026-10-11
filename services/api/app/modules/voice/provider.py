@@ -1,5 +1,8 @@
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 
+import edge_tts
+from edge_tts.exceptions import EdgeTTSException
 import httpx
 
 
@@ -14,7 +17,15 @@ class VoiceProvider(ABC):
     ) -> str: ...
 
     @abstractmethod
-    async def synthesize(self, text: str, *, instructions: str) -> bytes: ...
+    async def synthesize(
+        self, text: str, *, instructions: str, voice: str | None = None
+    ) -> bytes: ...
+
+    async def stream_synthesize(
+        self, text: str, *, instructions: str, voice: str | None = None
+    ) -> AsyncIterator[bytes]:
+        """Default buffered fallback for providers without native streaming."""
+        yield await self.synthesize(text, instructions=instructions, voice=voice)
 
 
 class OpenAIVoiceProvider(VoiceProvider):
@@ -64,7 +75,9 @@ class OpenAIVoiceProvider(VoiceProvider):
             raise VoiceProviderError("No speech could be transcribed from the audio.")
         return text.strip()
 
-    async def synthesize(self, text: str, *, instructions: str) -> bytes:
+    async def synthesize(
+        self, text: str, *, instructions: str, voice: str | None = None
+    ) -> bytes:
         try:
             async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
                 response = await client.post(
@@ -72,7 +85,7 @@ class OpenAIVoiceProvider(VoiceProvider):
                     headers={**self._headers(), "Content-Type": "application/json"},
                     json={
                         "model": self._tts_model,
-                        "voice": self._voice,
+                        "voice": voice or self._voice,
                         "input": text,
                         "instructions": instructions,
                         "response_format": "mp3",
@@ -86,3 +99,54 @@ class OpenAIVoiceProvider(VoiceProvider):
         if not audio:
             raise VoiceProviderError("The speech provider returned empty audio.")
         return audio
+
+
+class EdgeTTSVoiceProvider(VoiceProvider):
+    """Keyless Microsoft Neural Voice adapter for customer-facing speech."""
+
+    _ALLOWED_VOICES = {
+        "en-US-AvaMultilingualNeural",
+        "en-US-AndrewMultilingualNeural",
+    }
+
+    def __init__(self, *, voice: str) -> None:
+        self._voice = self._validate_voice(voice)
+
+    async def transcribe(self, audio: bytes, *, filename: str, content_type: str) -> str:
+        raise VoiceProviderError("Server transcription is not configured.")
+
+    async def synthesize(
+        self, text: str, *, instructions: str, voice: str | None = None
+    ) -> bytes:
+        chunks = [
+            chunk
+            async for chunk in self.stream_synthesize(text, instructions=instructions, voice=voice)
+        ]
+        audio = b"".join(chunks)
+        if not audio:
+            raise VoiceProviderError("The speech provider returned empty audio.")
+        return audio
+
+    async def stream_synthesize(
+        self, text: str, *, instructions: str, voice: str | None = None
+    ) -> AsyncIterator[bytes]:
+        del instructions  # Edge voices do not accept model instruction text.
+        selected_voice = self._validate_voice(voice or self._voice)
+        received_audio = False
+        try:
+            communicate = edge_tts.Communicate(text, voice=selected_voice, rate="+0%", pitch="+0Hz")
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio" and chunk.get("data"):
+                    received_audio = True
+                    yield chunk["data"]
+        except EdgeTTSException as exc:
+            raise VoiceProviderError("Speech synthesis is temporarily unavailable.") from exc
+
+        if not received_audio:
+            raise VoiceProviderError("The speech provider returned empty audio.")
+
+    @classmethod
+    def _validate_voice(cls, voice: str) -> str:
+        if voice not in cls._ALLOWED_VOICES:
+            raise VoiceProviderError("The requested voice is unavailable.")
+        return voice

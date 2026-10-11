@@ -272,6 +272,9 @@ export class ZelloWidgetElement extends HTMLElement {
         this.messages.push(customerBubble);
       }
       const assistantBubble = this.toBubble(exchange.assistantMessage);
+      if (exchange.action?.type === "ADD_TO_CART") {
+        assistantBubble.action = exchange.action;
+      }
       this.messages.push(assistantBubble);
       this.lastAssistantIntent = exchange.assistantMessage.intent ?? {};
       this.apiClient.setCachedMessages(this.messages);
@@ -352,6 +355,10 @@ export class ZelloWidgetElement extends HTMLElement {
       el.textContent = bubble.content;
       this.messagesEl.appendChild(el);
 
+      if (bubble.action?.type === "ADD_TO_CART") {
+        this.messagesEl.appendChild(this.buildCartConfirmationCard(bubble.action));
+      }
+
       if (bubble.products && bubble.products.length > 0) {
         const actionable = bubble === latestProducts && !this.isSending;
         this.messagesEl.appendChild(buildProductRow(bubble.products, actionable ? (product) => {
@@ -383,6 +390,33 @@ export class ZelloWidgetElement extends HTMLElement {
     if (this.isSending) return;
     this.inputEl.value = content;
     void this.handleSend();
+  }
+
+  /** Renders a deterministic receipt card from the completed backend action,
+   * rather than trusting conversational text to represent a cart mutation. */
+  private buildCartConfirmationCard(action: NonNullable<ChatBubble["action"]>): HTMLDivElement {
+    const card = document.createElement("div");
+    card.className = "zello-cart-confirmation";
+
+    const title = document.createElement("strong");
+    title.textContent = `${action.payload.title} added to cart`;
+    card.appendChild(title);
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "zello-action";
+    button.textContent = "View Cart / Checkout";
+    button.addEventListener("click", () => {
+      if (this.config.storefrontPath) {
+        window.location.assign(`${this.config.storefrontPath}/cart`);
+        return;
+      }
+      window.dispatchEvent(new CustomEvent("zello:view-cart", {
+        detail: { tenantSlug: this.config.tenantSlug },
+      }));
+    });
+    card.appendChild(button);
+    return card;
   }
 
   private renderTypingIndicator(show: boolean): void {

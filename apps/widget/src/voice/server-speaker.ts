@@ -42,6 +42,11 @@ export class ServerVoiceSpeaker {
   }
 
   stop(): void {
+    this.stopAudio();
+  }
+
+  /** Immediately discard server TTS playback for a customer interruption. */
+  stopAudio(): void {
     if (this.audio) {
       this.audio.onplay = null;
       this.audio.onended = null;
@@ -50,6 +55,10 @@ export class ServerVoiceSpeaker {
       this.audio.currentTime = 0;
     }
     this.cleanup();
+  }
+
+  get isPlaying(): boolean {
+    return this.isSpeaking();
   }
 
   isSpeaking(): boolean {

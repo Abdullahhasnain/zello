@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import StreamingResponse
 
 from app.core.security import AuthContext
 from app.modules.voice.dependencies import VoiceUnavailableError, get_voice_service
@@ -38,11 +39,24 @@ async def create_speech(
     voice_service: Annotated[VoiceService, Depends(get_voice_service)],
 ) -> Response:
     try:
-        audio = await voice_service.synthesize(payload.text, payload.language)
+        audio = await voice_service.synthesize(payload.text, payload.language, payload.voice)
     except VoiceProviderError as exc:
         raise VoiceUnavailableError(str(exc)) from exc
     return Response(
         content=audio,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.post("/tts", summary="Stream one assistant voice reply")
+async def stream_speech(
+    payload: SpeechCreate,
+    _auth: Annotated[AuthContext, Depends(get_current_customer_auth)],
+    voice_service: Annotated[VoiceService, Depends(get_voice_service)],
+) -> StreamingResponse:
+    return StreamingResponse(
+        voice_service.stream_synthesize(payload.text, payload.language, payload.voice),
         media_type="audio/mpeg",
         headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
     )

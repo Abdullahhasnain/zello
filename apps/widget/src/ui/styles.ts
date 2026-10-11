@@ -296,6 +296,12 @@ export function buildStyles(primaryColor: string): string {
     .zello-action:hover { border-color: var(--zello-primary); }
     .zello-action:disabled { opacity: .45; cursor: not-allowed; }
     .zello-suggestions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .zello-cart-confirmation {
+      align-self: flex-start; display: flex; gap: 10px; align-items: center;
+      flex-wrap: wrap; margin: 2px 0 8px; padding: 10px 12px;
+      border: 1px solid var(--zello-primary); border-radius: 12px;
+      background: var(--zello-surface); color: var(--zello-ink); font-size: 13px;
+    }
     .zello-shopping-links { display: flex; gap: 12px; padding: 10px 16px; border-top: 1px solid #eee; }
     .zello-shopping-links a { color: var(--zello-primary); font-size: 13px; font-weight: 600; }
     :host([data-inline]) { display: block; width: 100%; }

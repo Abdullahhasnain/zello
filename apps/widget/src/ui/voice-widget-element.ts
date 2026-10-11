@@ -105,8 +105,8 @@ const PROACTIVE_GREETING_DELAY_MS = 4000;
 export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
   private readonly recognizer = new VoiceRecognizer();
   private readonly speaker = new VoiceSpeaker();
-  private readonly serverRecorder = new ServerVoiceRecorder();
   private readonly serverSpeaker = new ServerVoiceSpeaker();
+  private readonly serverRecorder = new ServerVoiceRecorder(this.serverSpeaker);
   private readonly voiceSupported: boolean;
   private serverTranscriptionUnavailable = false;
   private serverSpeechUnavailable = false;
@@ -560,8 +560,8 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
         this.serverRecorder.stop();
         return;
       case "speaking":
-        this.stopSpeech();
-        this.setVoiceState("idle");
+        // Start recording while server audio remains active. The recorder's
+        // VAD stops it on the first detected customer speech (barge-in).
         this.startListening();
         return;
       case "processing":

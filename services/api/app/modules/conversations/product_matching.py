@@ -28,6 +28,99 @@ _CATEGORIES = {
     "kurta": ("kurta", "kurtas", "کرتا"),
 }
 
+_COMPARISON_INTENT = re.compile(
+    r"\b(compare|comparison|versus|vs\.?|which\s+(?:one|is)\s+(?:better|best)|"
+    r"(?:kaunsa|konsa|kon\s*sa)\s+(?:behtar|best)|farq|difference|"
+    r"(?:ya|or)\b.*\b(?:kaunsa|konsa|which|better|loon|lena))\b|"
+    r"میں\s*سے\s*کون\s*سا|موازنہ",
+    re.IGNORECASE,
+)
+
+_COMPARISON_SPLIT = re.compile(
+    r"(?:compare|comparison|which\s+one\s+is\s+better\s+between|"
+    r"kaunsa\s+behtar\s+hai\s+between|konsa\s+behtar\s+hai\s+between)\s+"
+    r"(?P<left>.+?)\s+(?:and|or|ya|vs\.?|versus)\s+(?P<right>.+?)(?:[?.!]|$)",
+    re.IGNORECASE,
+)
+
+# Covers the natural form "Product A ya Product B me se konsa loon?" as
+# well as a simple "Product A vs Product B".  It is only used after the
+# intent detector has identified a comparison, so ordinary search queries do
+# not get split merely because they contain "and".
+_DIRECT_COMPARISON_SPLIT = re.compile(
+    r"(?P<left>.+?)\s+(?:and|or|ya|vs\.?|versus)\s+(?P<right>.+?)"
+    r"(?:\s+(?:me|mein)\s+se\s+(?:kaunsa|konsa|which|better|loon|lena).*)?"
+    r"(?:[?.!]|$)",
+    re.IGNORECASE,
+)
+
+
+def is_comparison_intent(text: str) -> bool:
+    """Recognise explicit English, Roman Urdu, and Urdu comparison requests."""
+    return bool(_COMPARISON_INTENT.search(text))
+
+
+def extract_comparison_terms(text: str) -> tuple[str, str] | None:
+    """Extract two catalog-searchable names from a direct comparison request.
+
+    A request such as "compare options" intentionally returns ``None``; in
+    that case the router compares the two products from the current catalog
+    context instead of guessing names that the customer did not say.
+    """
+    compact = " ".join(text.split())
+    match = _COMPARISON_SPLIT.search(compact)
+    if not match and is_comparison_intent(compact):
+        match = _DIRECT_COMPARISON_SPLIT.search(compact)
+    if not match:
+        return None
+    left = re.sub(
+        r"^(?:compare(?:\s+between)?|comparison(?:\s+between)?|"
+        r"which\s+one\s+is\s+better\s+between)\s+",
+        "",
+        match.group("left"),
+        flags=re.IGNORECASE,
+    ).strip(" ,:-")
+    right = re.sub(
+        r"\s+(?:me|mein)\s+se\s+(?:kaunsa|konsa|which|better|loon|lena).*?$",
+        "",
+        match.group("right"),
+        flags=re.IGNORECASE,
+    ).strip(" ,:-")
+    return (left, right) if left and right else None
+
+
+def match_comparison_products(query: str, products: list[Product]) -> list[Product]:
+    """Return up to two real catalog products for a comparison turn.
+
+    Full product-title mentions win. If the customer says "compare options",
+    preserve the current catalog order and take the first two real products
+    already shown to them. Archived records are never surfaced.
+    """
+    active = [product for product in products if product.status != ProductStatus.ARCHIVED]
+    if not active:
+        return []
+
+    normalized_query = _comparison_text(query)
+    scored: list[tuple[int, int, Product]] = []
+    for index, product in enumerate(active):
+        title = _comparison_text(product.title)
+        title_tokens = {token for token in title.split() if len(token) > 2 and token != "demo"}
+        if title and title in normalized_query:
+            scored.append((len(title_tokens) + 100, index, product))
+            continue
+        overlap = len(title_tokens & set(normalized_query.split()))
+        if overlap >= 2:
+            scored.append((overlap, index, product))
+
+    if scored:
+        scored.sort(key=lambda item: (-item[0], item[1]))
+        return [product for _, _, product in scored[:2]]
+    return active[:2]
+
+
+def _comparison_text(value: str) -> str:
+    return re.sub(r"[^\w\s]", " ", value.casefold()).replace("_", " ")
+
 
 def _normal(value: object) -> str:
     text = str(value).strip().lower()

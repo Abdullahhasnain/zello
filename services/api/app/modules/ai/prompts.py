@@ -21,6 +21,7 @@ catalog.
 """
 
 from app.domain.entities.product import Product
+from app.modules.conversations.reply_composer import format_price
 
 # The preference slots the planner extracts and the router accumulates into
 # conversation.context across turns — a real salesperson's mental checklist
@@ -76,8 +77,9 @@ def build_planner_prompt(
         f"Clarifying questions already asked this conversation: {clarifications_so_far}\n\n"
         "Decide the action for THIS turn — lean towards being a curious salesperson, not a search "
         "box:\n"
-        '- "add_to_cart": ONLY when the latest message explicitly asks to add a product to '
-        "the cart. Questions, hypothetical requests and negations are NOT permission. Select "
+        '- "add_to_cart": ONLY when the latest message explicitly asks to add or buy a product — '
+        'for example "add to cart", "buy this", "yeh cart mein daal do", "2 piece add kardo", '
+        'or "kharidna hai". Questions, hypothetical requests and negations are NOT permission. Select "
         "one unambiguous product from the supplied real product list, using its exact UUID. "
         "If unclear, clarify which product. Never place an order or take payment.\n"
         '- "clarify": choose this when a short, natural question would help you recommend better, '
@@ -100,7 +102,7 @@ def build_planner_prompt(
         "{\n"
         '  "action": "search" | "clarify" | "add_to_cart",\n'
         '  "product_id": "supplied UUID for add_to_cart, otherwise null",\n'
-        '  "quantity": 1,\n'
+        '  "quantity": "explicit requested quantity, otherwise 1",\n'
         '  "slots": { ...only confident keys... },\n'
         '  "search_query": "concise phrase combining ALL known + new preferences in the '
         'customer\'s words, or null when action is clarify",\n'
@@ -117,6 +119,7 @@ def build_system_prompt(
     language: str,
     known_preferences: str = "none yet",
     exact_match: bool = True,
+    comparison: bool = False,
 ) -> str:
     """`exact_match=False` means the search for what the customer actually
     asked for came back empty, and the 'Available products' list (if any) is
@@ -125,6 +128,23 @@ def build_system_prompt(
     we do have these" framing (the vision's black-shirt→black-kurta case),
     never pretending the alternatives are the exact item."""
     persona_line = f' Your assistant persona: "{persona}".' if persona else ""
+
+    comparison_rule = ""
+    reply_length_rule = "Keep it to 1–3 short sentences, not a formal essay or a bullet-point catalog dump."
+    if comparison:
+        comparison_rule = (
+            "COMPARISON MODE: exactly two real products are supplied below. Start with one short verdict "
+            "that says who each product suits, based only on its supplied details. Then give concise "
+            "labelled "
+            "comparison points for Price, Key spec/material, and Best for. Include 2–3 brief Pros/Consider "
+            "points total, each grounded in the supplied features, details, price, or stock. Use plain text "
+            "labels, not a Markdown table or bullets, because the reply is also spoken aloud. Do not call a "
+            "product better unless you state the customer need it is better for.\n"
+        )
+        reply_length_rule = (
+            "For this comparison, use one short verdict followed by up to five short labelled lines; "
+            "do not turn it into a long catalog dump."
+        )
 
     if exact_match:
         results_rule = (
@@ -158,10 +178,15 @@ def build_system_prompt(
         "'Available products' list given to you in this conversation. Never invent a "
         "product, price, or fact that isn't in that list.\n"
         f"{results_rule}"
-        "Keep it to 1–3 short sentences, not a formal essay or a bullet-point catalog dump. The "
+        f"{reply_length_rule} The "
         "reply is spoken aloud: do not use Markdown, asterisks, headings or numbered lists. "
         "product cards are shown separately on screen, so don't re-list every product's full "
         "details.\n"
+        "Speak concisely, warmly, and directly like an authentic human store assistant. Avoid "
+        "robotic filler sentences. Never output or pronounce trailing zeroes or raw floating-point "
+        "numbers: say '$12' or '12 dollars', never '$12.00000'. Use prices exactly as formatted in "
+        "the available-products list.\n"
+        f"{comparison_rule}"
         "4. Explaining a product: use only its own 'features:' and 'details:' lines above. If the "
         "customer asks something those don't cover (exact fabric, warranty, delivery time), say "
         "you don't have that detail rather than guessing. This store's catalog carries no "
@@ -210,7 +235,7 @@ def _truncate(text: str, limit: int) -> str:
     return cleaned if len(cleaned) <= limit else f"{cleaned[:limit].rstrip()}…"
 
 
-def format_product_context(products: list[Product]) -> str:
+def format_product_context(products: list[Product], *, comparison: bool = False) -> str:
     """The real catalog rows the reply must be built from. Includes each
     product's own description and attributes — without them the assistant
     can only recite titles and prices, and genuinely cannot answer "what's
@@ -219,12 +244,18 @@ def format_product_context(products: list[Product]) -> str:
     if not products:
         return "Available products for this turn: (none matched the customer's message)"
 
-    lines = ["Available products for this turn (the ONLY products you may mention):"]
-    for product in products:
+    lines = [
+        "Comparison products for this turn (the ONLY products you may mention):"
+        if comparison
+        else "Available products for this turn (the ONLY products you may mention):"
+    ]
+    for index, product in enumerate(products):
+        if comparison:
+            lines.append(f"Product {'AB'[index] if index < 2 else index + 1}:")
         in_stock = product.stock_qty > 0 and product.status.value == "active"
         stock_note = f"in stock, {product.stock_qty} available" if in_stock else "out of stock"
         lines.append(
-            f'- "{product.title}" — {product.currency} {product.price} ({stock_note}, '
+            f'- "{product.title}" — {format_price(product.price, product.currency)} ({stock_note}, '
             f"id: {product.id})"
         )
         if product.description:

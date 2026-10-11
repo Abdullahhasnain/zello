@@ -20,9 +20,20 @@ from app.modules.conversations.dependencies import (
     get_conversation_service_for_store,
 )
 from app.modules.conversations.language import response_language
-from app.modules.conversations.product_matching import matches_preferences
-from app.modules.conversations.reply_composer import compose_greeting
+from app.modules.conversations.product_matching import (
+    extract_comparison_terms,
+    is_comparison_intent,
+    match_comparison_products,
+    matches_preferences,
+)
+from app.modules.conversations.reply_composer import (
+    compose_cart_confirmation,
+    compose_greeting,
+    extract_cart_quantity,
+    is_cart_request,
+)
 from app.modules.conversations.schemas import (
+    ConversationActionRead,
     ConversationMessageRead,
     ConversationRead,
     ConversationStartResponse,
@@ -101,13 +112,36 @@ def _references_recent_products(text: str) -> bool:
 
 
 def _explicit_cart_request(text: str) -> bool:
-    """Independent safety gate: the planner alone cannot authorize a mutation."""
-    text = text.lower()
-    return (
-        bool(re.search(r"\b(cart|basket)\b|کارٹ|ٹوکری", text))
-        and bool(re.search(r"\b(add|put|daal|dal|dalo|daalo)\b|ڈال|شامل", text))
-        and not re.search(r"\b(not|don't|dont|never|nahi|nahin|mat|how|kaise)\b|نہیں|مت|کیسے", text)
-    )
+    """Backward-compatible name for the deterministic cart safety gate."""
+    return is_cart_request(text)
+
+
+def _select_cart_product(
+    products: list[Product],
+    text: str,
+    planned_product_id: str | None,
+) -> Product | None:
+    """Resolve a requested product from grounded, recently shown products.
+
+    A planner UUID wins only when it belongs to that real context. Without a
+    planner, accept a title explicitly spoken by the shopper, or the single
+    product that was last shown. Multiple unnamed choices stay ambiguous and
+    require a follow-up rather than silently adding the first card.
+    """
+    if planned_product_id:
+        selected = next((product for product in products if str(product.id) == planned_product_id), None)
+        if selected:
+            return selected
+
+    normalized_text = " ".join(re.findall(r"[\w]+", text.casefold()))
+    named = [
+        product
+        for product in products
+        if " ".join(re.findall(r"[\w]+", product.title.casefold())) in normalized_text
+    ]
+    if len(named) == 1:
+        return named[0]
+    return products[0] if len(products) == 1 else None
 
 
 async def _load_recent_products(
@@ -154,6 +188,32 @@ async def _find_alternatives(
         if results:
             return results
     return []
+
+
+async def _find_comparison_products(
+    search_service: SearchService,
+    tenant_id: UUID,
+    query: str,
+    recent_products: list[Product],
+    found_products: list[Product],
+) -> list[Product]:
+    """Resolve the two products named by a comparison without new storage."""
+    candidates = [*recent_products, *found_products]
+    terms = extract_comparison_terms(query)
+    if terms:
+        for term in terms:
+            try:
+                candidates.extend(await search_service.search_products(tenant_id, term, top_k=3))
+            except Exception:  # noqa: BLE001 - a partial comparison still has the current context
+                continue
+
+    deduplicated: list[Product] = []
+    seen_ids: set[UUID] = set()
+    for product in candidates:
+        if product.id not in seen_ids:
+            deduplicated.append(product)
+            seen_ids.add(product.id)
+    return match_comparison_products(query, deduplicated)
 
 
 # --- Customer widget: creates and appends to its own conversation ---
@@ -233,9 +293,11 @@ async def post_message(
         customer = next((m for m in previous if m.role == MessageRole.CUSTOMER), None)
         assistant = next((m for m in previous if m.role == MessageRole.ASSISTANT), None)
         if customer and assistant:
+            stored_action = assistant.intent.get("action_metadata")
             return MessageExchangeRead(
                 customer_message=ConversationMessageRead.model_validate(customer),
                 assistant_message=ConversationMessageRead.model_validate(assistant),
+                action=stored_action if isinstance(stored_action, dict) else None,
             )
 
     if not await enforce_conversation_rate_limit(str(conversation_id), get_redis_client()):
@@ -263,8 +325,13 @@ async def post_message(
     turn_language = response_language(payload.content, str(prior_language))
 
     clarifications_so_far = int(context.get("clarification_count", 0) or 0)
+    comparison_requested = is_comparison_intent(payload.content)
+    cart_requested = is_cart_request(payload.content)
     references_recent_products = _references_recent_products(payload.content) and bool(
         context.get("last_matched_product_ids")
+    )
+    references_recent_products = references_recent_products or (
+        comparison_requested and bool(context.get("last_matched_product_ids"))
     )
 
     recent_products = await _load_recent_products(
@@ -297,19 +364,29 @@ async def post_message(
         and plan.action == "clarify"
         and clarifications_so_far < _MAX_CLARIFICATIONS
         and not references_recent_products
+        and not comparison_requested
+        and not cart_requested
     )
 
     cart_intent = {}
-    is_cart = bool(plan and plan.action == "add_to_cart")
+    cart_action: ConversationActionRead | dict | None = None
+    is_cart = cart_requested
     if is_cart:
-        assert plan is not None
-        selected = next((p for p in recent_products if str(p.id) == plan.product_id), None)
+        selected = _select_cart_product(
+            recent_products,
+            payload.content,
+            plan.product_id if plan and plan.action == "add_to_cart" else None,
+        )
+        quantity = (
+            plan.quantity
+            if plan and plan.action == "add_to_cart"
+            else extract_cart_quantity(payload.content)
+        )
         matched_product_ids = [str(selected.id)] if selected else []
         ai_generated = False  # factual transaction receipt, never fabricated by the LLM
         if (
             not selected
             or not matches_preferences(selected, merged_context)
-            or not _explicit_cart_request(payload.content)
         ):
             reply_text = "Please name the product you want me to add to your cart."
             if turn_language == "roman_urdu":
@@ -329,18 +406,25 @@ async def post_message(
                         cart = None
                 if cart is None:
                     cart = await order_service.create_cart(conversation.tenant_id, conversation_id)
-                await order_service.add_item(cart.id, selected.id, plan.quantity)
+                await order_service.add_item(cart.id, selected.id, quantity)
                 items = await order_service.list_cart_items(cart.id)
-                cart_intent = {"cart_id": str(cart.id), "cart_count": sum(i.quantity for i in items)}
+                cart_action = {
+                    "type": "ADD_TO_CART",
+                    "payload": {
+                        "product_id": str(selected.id),
+                        "quantity": quantity,
+                        "title": selected.title,
+                    },
+                }
+                cart_intent = {
+                    "cart_id": str(cart.id),
+                    "cart_count": sum(i.quantity for i in items),
+                    # Persist an additive copy for replay/idempotency while
+                    # leaving the legacy string `intent.action` unchanged.
+                    "action_metadata": cart_action,
+                }
                 merged_context["cart_id"] = str(cart.id)
-                receipt = f"{plan.quantity} × {selected.title} ({selected.currency} {selected.price} each)"
-                reply_text = f"Added {receipt} to your cart. Review the cart before confirming checkout."
-                if turn_language == "roman_urdu":
-                    reply_text = (
-                        f"{receipt} cart mein add ho gaya. Order confirm karne se pehle cart dekh lein."
-                    )
-                elif turn_language == "urdu":
-                    reply_text = f"{receipt} کارٹ میں شامل ہو گیا۔ آرڈر کی تصدیق سے پہلے کارٹ دیکھ لیں۔"
+                reply_text = compose_cart_confirmation(turn_language, selected, quantity)
             except ValidationError:
                 reply_text = "I couldn't add that quantity. Please check the available stock and your cart."
                 if turn_language == "roman_urdu":
@@ -381,6 +465,16 @@ async def post_message(
                 logger.warning("product_search_failed", conversation_id=str(conversation_id), error=str(exc))
                 found = []
 
+        comparison_products = []
+        if comparison_requested:
+            comparison_products = await _find_comparison_products(
+                search_service,
+                conversation.tenant_id,
+                payload.content,
+                recent_products,
+                found,
+            )
+
         # Respect a stated budget the way a salesperson would, but honestly.
         # `found` is ranked by relevance, so found[0] is the best match for
         # what they actually asked for. If that best match is within budget,
@@ -392,7 +486,10 @@ async def post_message(
         # X, but we do have these from Y").
         found = [p for p in found if matches_preferences(p, merged_context)]
         budget = _extract_budget(merged_context.get("budget"))
-        if budget is None:
+        if len(comparison_products) == 2:
+            matched_products = comparison_products
+            exact_match = True
+        elif budget is None:
             matched_products = found[:_REPLY_PRODUCT_LIMIT]
             exact_match = bool(found)
         elif found and float(found[0].price) <= budget:
@@ -423,6 +520,7 @@ async def post_message(
             history=history,
             known_preferences=format_known_preferences(merged_context),
             exact_match=exact_match,
+            comparison=comparison_requested and len(matched_products) == 2,
         )
         reply_text = reply.text
         ai_generated = reply.ai_generated
@@ -456,6 +554,7 @@ async def post_message(
     return MessageExchangeRead(
         customer_message=ConversationMessageRead.model_validate(customer_message),
         assistant_message=ConversationMessageRead.model_validate(assistant_message),
+        action=cart_action,
     )
 
 
