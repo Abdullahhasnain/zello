@@ -59,4 +59,5 @@ def get_ai_orchestrator() -> AIOrchestrator:
         max_tokens=settings.AI_MAX_TOKENS,
         temperature=settings.AI_TEMPERATURE,
         history_turns=settings.AI_HISTORY_TURNS,
+        plan_timeout_seconds=settings.AI_PLAN_TIMEOUT_SECONDS,
     )

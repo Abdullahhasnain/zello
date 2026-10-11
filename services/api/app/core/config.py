@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     # each plan/reply call. Twenty preserves up to ten spoken exchanges.
     AI_HISTORY_TURNS: int = 20
     AI_REQUEST_TIMEOUT_SECONDS: float = 15.0
+    # Planning is optional. Keep it short so an offline/slow model never
+    # delays deterministic catalog search and cart handling for a shopper.
+    AI_PLAN_TIMEOUT_SECONDS: float = 5.0
     # Per-conversation cap, tighter than RATE_LIMIT_PER_MINUTE below — an AI
     # reply costs real money per call, unlike most endpoints, so it gets its
     # own budget on top of the general API rate limit.

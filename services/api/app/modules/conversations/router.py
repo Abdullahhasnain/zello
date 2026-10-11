@@ -1,3 +1,4 @@
+import asyncio
 import re
 from typing import Annotated
 from uuid import UUID
@@ -68,6 +69,7 @@ _REPLY_PRODUCT_LIMIT = 5
 # the next turn always searches even if the planner would still ask, so the
 # customer never gets stuck in an endless Q&A loop.
 _MAX_CLARIFICATIONS = 2
+_SEARCH_TIMEOUT_SECONDS = 5.0
 
 _FOLLOW_UP_REFERENCE = re.compile(
     r"\b(this|that|these|those|it|one|ones|ye|yeh|woh|wo|wala|wali|walay|"
@@ -82,6 +84,11 @@ _PRODUCT_POSITION = re.compile(
     r"\b(?:(?P<first>first|1st|pehla|pehli|pehle|pehlay)|(?P<second>second|2nd|doosra|dusra|dusri)|"
     r"(?P<recommended>recommend(?:ed)?|suggest(?:ed)?|best))\b|"
     r"(?:(?P<urdu_first>پہلا|پہلی)|(?P<urdu_second>دوسرا|دوسری)|(?P<urdu_recommended>ریکمینڈ))",
+    re.IGNORECASE,
+)
+
+_CHEAPER_REQUEST = re.compile(
+    r"\b(?:cheaper|cheap|less|sasta|sasti|kam|budget)\b|سستا|کم",
     re.IGNORECASE,
 )
 
@@ -119,6 +126,10 @@ def _references_recent_products(text: str) -> bool:
     """Recognizes short/deictic follow-ups whose meaning comes from the
     products shown on the previous turn, not from a fresh semantic search."""
     return bool(_FOLLOW_UP_REFERENCE.search(text))
+
+
+def _is_cheaper_request(text: str) -> bool:
+    return bool(_CHEAPER_REQUEST.search(text))
 
 
 def _explicit_cart_request(text: str) -> bool:
@@ -506,7 +517,10 @@ async def post_message(
                 found = []
         if not found:
             try:
-                found = await search_service.search_products(conversation.tenant_id, search_query, top_k=20)
+                found = await asyncio.wait_for(
+                    search_service.search_products(conversation.tenant_id, search_query, top_k=20),
+                    timeout=_SEARCH_TIMEOUT_SECONDS,
+                )
             except Exception as exc:  # noqa: BLE001 — an embeddings-provider outage (bad/missing
                 # key, rate limit, network) must degrade to a real local
                 # catalog lookup, never a 500 or invented products.
@@ -535,6 +549,13 @@ async def post_message(
         # real (over-budget) options as honest alternatives ("nothing under
         # X, but we do have these from Y").
         found = [p for p in found if matches_preferences(p, merged_context)]
+        if references_recent_products and _is_cheaper_request(payload.content):
+            recommended_id = context.get("last_recommended_product_id")
+            recommended = next((p for p in recent_products if str(p.id) == str(recommended_id)), None)
+            if recommended is not None:
+                cheaper = [p for p in found if p.price < recommended.price]
+                if cheaper:
+                    found = sorted(cheaper, key=lambda product: product.price)
         budget = _extract_budget(merged_context.get("budget"))
         if len(comparison_products) == 2:
             matched_products = comparison_products

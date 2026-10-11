@@ -12,6 +12,7 @@ module is that orchestrator, and the MVP's original templated flow becomes
 its safety net rather than being replaced.
 """
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 
@@ -71,11 +72,13 @@ class AIOrchestrator:
         max_tokens: int,
         temperature: float,
         history_turns: int,
+        plan_timeout_seconds: float = 5.0,
     ) -> None:
         self._provider = provider
         self._max_tokens = max_tokens
         self._temperature = temperature
         self._history_turns = history_turns
+        self._plan_timeout_seconds = plan_timeout_seconds
 
     @property
     def is_configured(self) -> bool:
@@ -120,8 +123,11 @@ class AIOrchestrator:
         messages.append(ChatMessage(role="user", content=query))
 
         try:
-            raw = await self._provider.complete(
-                messages, max_tokens=self._max_tokens, temperature=_PLANNER_TEMPERATURE
+            raw = await asyncio.wait_for(
+                self._provider.complete(
+                    messages, max_tokens=self._max_tokens, temperature=_PLANNER_TEMPERATURE
+                ),
+                timeout=self._plan_timeout_seconds,
             )
         except Exception as exc:  # noqa: BLE001 — a planner failure must degrade to the
             # always-search fallback, never surface as a 500 to a shopper.
