@@ -332,5 +332,104 @@ export function buildStyles(primaryColor: string): string {
       :host([data-inline]) .zello-product-row { grid-template-columns: 1fr; }
       :host([data-inline]) .zello-input-row { gap: 5px; padding: 10px; }
     }
+
+    /* Premium sales-agent presentation. These rules deliberately come last
+       so all existing embed modes retain their behaviour and only their
+       visual surface changes. */
+    :host {
+      --zello-navy: #080e1b;
+      --zello-panel-navy: #0d1728;
+      --zello-panel-soft: #121f34;
+      --zello-line: rgba(177, 194, 230, .14);
+      --zello-accent: #6d54ff;
+      --zello-accent-blue: #2178ff;
+      --zello-glow: rgba(109, 84, 255, .38);
+    }
+    .zello-launcher {
+      width: auto; min-width: 172px; height: 54px; padding: 0 19px 0 14px;
+      gap: 10px; border-radius: 999px; color: #fff;
+      background: linear-gradient(120deg, #171129, #0f1b35 58%, #122951);
+      border: 1px solid rgba(151, 120, 255, .8);
+      box-shadow: 0 10px 30px rgba(10, 9, 35, .42), 0 0 0 3px rgba(109,84,255,.11), 0 0 24px var(--zello-glow);
+      font: 700 14px/1 inherit; letter-spacing: .01em;
+    }
+    .zello-launcher::before { content: ""; position: absolute; inset: 2px; border-radius: inherit; background: linear-gradient(110deg, rgba(255,255,255,.1), transparent 42%); pointer-events: none; }
+    .zello-launcher:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 14px 34px rgba(10,9,35,.52), 0 0 30px var(--zello-glow); }
+    .zello-launcher svg { width: 25px; height: 25px; color: #c6bbff; filter: drop-shadow(0 0 8px #7965ff); }
+    .zello-launcher span { position: relative; }
+
+    .zello-panel {
+      width: min(456px, calc(100vw - 32px)); height: min(730px, calc(100vh - 116px));
+      max-height: calc(100vh - 116px); bottom: 86px; border-radius: 25px;
+      color: #f6f8ff; background: var(--zello-navy);
+      border: 1px solid rgba(116, 96, 255, .75);
+      box-shadow: 0 24px 70px rgba(3, 7, 18, .55), 0 0 34px rgba(90,70,255,.19);
+      transform: translateY(18px) scale(.985); transition: opacity .22s ease, transform .22s cubic-bezier(.2,.8,.2,1);
+    }
+    .zello-panel.zello-open { transform: translateY(0) scale(1); }
+    .zello-header {
+      min-height: 82px; padding: 15px 17px; color: #f8f9ff;
+      background: radial-gradient(circle at 5% 5%, rgba(113,81,255,.28), transparent 36%), linear-gradient(120deg, #0b1220, #101d31);
+      border-bottom: 1px solid var(--zello-line);
+    }
+    .zello-header-title { display: flex; gap: 10px; align-items: center; min-width: 0; flex: 1; color: #fff; }
+    .zello-header-title strong { display: block; font-size: 19px; letter-spacing: -.025em; }
+    .zello-header-title small { display: block; margin-top: 3px; color: #aab6d0; font-size: 11px; font-weight: 500; white-space: nowrap; }
+    .zello-header-title small i { display: inline-block; width: 6px; height: 6px; margin: 0 4px 1px 0; border-radius: 50%; background: #43e08c; box-shadow: 0 0 8px #43e08c; }
+    .zello-orb { display: grid; place-items: center; width: 39px; height: 39px; border-radius: 50%; color: #dfdaff; font-size: 21px; background: radial-gradient(circle at 35% 30%, #a38eff, #5c36ed 52%, #21124b); box-shadow: 0 0 0 2px #816cff, 0 0 18px #6d54ff; }
+    .zello-close-button, .zello-header-icon-button, .zello-expand-button { width: 35px; height: 35px; border-radius: 11px; display: inline-grid; place-items: center; color: #dce5ff; background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.05); }
+    .zello-close-button:hover, .zello-header-icon-button:hover, .zello-expand-button:hover { background: rgba(255,255,255,.12); }
+    .zello-panel.zello-expanded { width: min(620px, calc(100vw - 32px)); height: min(820px, calc(100vh - 32px)); }
+
+    .zello-messages { padding: 18px; gap: 12px; background: linear-gradient(180deg, #0c1626, #0a121f 56%, #0b1422); scrollbar-color: #384968 transparent; }
+    .zello-bubble { max-width: 84%; padding: 11px 13px; font-size: 13px; line-height: 1.48; border-radius: 16px; box-shadow: 0 5px 12px rgba(0,0,0,.11); }
+    .zello-bubble-assistant { color: #f3f6ff; background: #172335; border: 1px solid rgba(201,216,255,.06); border-bottom-left-radius: 5px; }
+    .zello-bubble-customer { background: linear-gradient(125deg, #3157e9, #1779ff); border-bottom-right-radius: 5px; }
+    .zello-typing { background: #172335; border: 1px solid rgba(201,216,255,.06); }
+    .zello-typing span { background: #a8b7d5; }
+
+    .zello-product-row { width: 100%; gap: 10px; padding: 2px 1px 10px; scroll-snap-type: x mandatory; scrollbar-width: thin; scrollbar-color: #495a80 transparent; }
+    .zello-product-card { width: 184px; min-height: 275px; padding: 9px; gap: 7px; border-radius: 16px; color: #111827; background: #fff; border: 1px solid rgba(255,255,255,.9); box-shadow: 0 8px 20px rgba(0,0,0,.23); scroll-snap-align: start; animation: zello-card-in .28s ease both; }
+    .zello-product-card:nth-child(2) { animation-delay: .05s; } .zello-product-card:nth-child(3) { animation-delay: .1s; }
+    @keyframes zello-card-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .zello-product-card-pending { outline: 2px solid #7061ff; box-shadow: 0 0 0 4px rgba(112,97,255,.22), 0 10px 24px rgba(0,0,0,.28); }
+    .zello-product-card-added { outline: 2px solid #1dbb75; }
+    .zello-product-image { height: 126px; border-radius: 11px; background: #f3f5f8; }
+    .zello-product-image-placeholder::after { background: #d5dce9; }
+    .zello-product-title { min-height: 32px; font-size: 12px; font-weight: 700; color: #131a29; }
+    .zello-product-price { font-size: 15px; font-weight: 800; color: #101729; }
+    .zello-product-stock { font-size: 10px; font-weight: 650; color: #248f5f; }
+    .zello-product-recommendation { position: absolute; top: 14px; left: 14px; z-index: 1; padding: 4px 7px; border-radius: 7px; color: #fff; background: linear-gradient(100deg, #7543f4, #4267ff); box-shadow: 0 4px 10px rgba(75,62,231,.3); font-size: 9px; font-weight: 800; }
+    .zello-product-badge { background: rgba(18,25,39,.78); }
+    .zello-product-add { width: 100%; min-height: 35px; margin-top: auto; padding: 8px; border: 0; border-radius: 9px; color: #fff; background: #101827; cursor: pointer; font: 700 11px/1 inherit; transition: transform .15s ease, background .15s ease; }
+    .zello-product-add:hover:not(:disabled) { background: #253858; transform: translateY(-1px); } .zello-product-add:disabled { opacity: .72; cursor: default; } .zello-product-card-added .zello-product-add { background: #168c57; }
+
+    .zello-suggestions { gap: 7px; padding: 0 0 2px; }
+    .zello-action { color: #dce7ff; background: rgba(21,34,55,.78); border: 1px solid #334765; border-radius: 999px; padding: 8px 11px; font-size: 11px; transition: border-color .15s ease, transform .15s ease, background .15s ease; }
+    .zello-action:hover { color: #fff; border-color: #7c6cff; background: rgba(79,67,177,.3); transform: translateY(-1px); }
+    .zello-quick-chips { margin: 3px 0 6px; }
+    .zello-cart-confirmation { color: #d8ffe8; background: rgba(21,118,75,.18); border-color: rgba(56,217,135,.45); border-radius: 14px; }
+    .zello-cart-confirmation .zello-action { background: #168c57; border-color: #168c57; color: #fff; }
+    .zello-cart-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+    .zello-cart-actions .zello-action { flex: 1 1 auto; justify-content: center; }
+    .zello-shopping-links { padding: 11px 17px; justify-content: flex-end; border-top-color: var(--zello-line); background: #0b1422; }
+    .zello-shopping-links a { color: #a9c6ff; font-size: 11px; }
+    .zello-input-row { gap: 7px; padding: 12px 14px 14px; border-top-color: var(--zello-line); background: #0b1422; }
+    .zello-input { min-width: 0; color: #f3f6ff; background: #162337; border-color: #31435f; border-radius: 15px; padding: 12px 14px; font-size: 13px; }
+    .zello-input::placeholder { color: #8696b2; } .zello-input:focus { border-color: #7464ff; box-shadow: 0 0 0 3px rgba(112,97,255,.15); }
+    .zello-send-button { width: 44px; height: 44px; background: linear-gradient(135deg, #7460ff, #2678ff); box-shadow: 0 5px 14px rgba(51,91,255,.28); transition: transform .15s ease; }
+    .zello-send-button:hover:not(:disabled) { transform: translateY(-1px) scale(1.03); }
+
+    @media (max-width: 480px) {
+      .zello-launcher { min-width: 156px; height: 50px; bottom: 14px; }
+      .zello-panel { inset: 8px !important; width: auto; height: auto; max-width: none; max-height: none; border-radius: 22px; }
+      .zello-panel.zello-expanded { width: auto; height: auto; }
+      .zello-header { min-height: 74px; padding: 12px 14px; } .zello-header-title strong { font-size: 17px; }
+      .zello-header-title small { font-size: 10px; } .zello-messages { padding: 14px; }
+      .zello-product-card { width: 168px; min-height: 258px; } .zello-product-image { height: 114px; }
+      :host([data-inline]) .zello-panel { inset: auto !important; height: min(720px, 82dvh); border-radius: 20px; }
+      :host([data-inline]) .zello-product-row { display: flex; overflow-x: auto; grid-template-columns: none; }
+      :host([data-inline]) .zello-product-card { width: 168px; }
+    }
   `;
 }

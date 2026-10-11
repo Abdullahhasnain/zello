@@ -27,14 +27,14 @@ export function buildVoiceStyles(): string {
       height: 40px;
       border-radius: 50%;
       border: none;
-      background: transparent;
-      color: var(--zello-ink-soft);
+      background: rgba(255,255,255,.06);
+      color: #b9c8e5;
       cursor: pointer;
       transition: background 0.15s ease, color 0.15s ease;
     }
     .zello-mic-button:hover:not(:disabled),
     .zello-pause-button:hover:not(:disabled) {
-      background: var(--zello-surface-alt);
+      background: rgba(126,108,255,.2);
     }
     .zello-mic-button:disabled {
       opacity: 0.4;
@@ -48,7 +48,7 @@ export function buildVoiceStyles(): string {
 
     .zello-mic-listening {
       color: #ffffff;
-      background: #d64545;
+      background: linear-gradient(135deg, #ff536a, #d73764);
       animation: zello-mic-pulse 1.4s ease-in-out infinite;
     }
     .zello-mic-listening:hover { background: #c23b3b; }
@@ -59,7 +59,7 @@ export function buildVoiceStyles(): string {
 
     .zello-mic-speaking {
       color: #ffffff;
-      background: var(--zello-primary);
+      background: linear-gradient(135deg, #725eff, #2678ff);
     }
 
     .zello-mic-error {
@@ -81,27 +81,31 @@ export function buildVoiceStyles(): string {
       gap: 6px;
       padding: 2px 16px 8px;
       font-size: 12px;
-      color: var(--zello-ink-soft);
+      color: #a9b9d6;
       flex: 0 0 auto;
     }
     .zello-voice-status-visible {
       display: flex;
     }
+    .zello-voice-status-visible::before {
+      content: ""; width: 26px; height: 12px; display: inline-block;
+      background: linear-gradient(90deg, #7a68ff 16%, transparent 16% 28%, #7a68ff 28% 44%, transparent 44% 56%, #7a68ff 56% 72%, transparent 72% 84%, #7a68ff 84%);
+      border-radius: 4px; opacity: .9; animation: zello-wave 1s ease-in-out infinite;
+    }
+    @keyframes zello-wave { 50% { transform: scaleY(1.45); opacity: .55; } }
     .zello-voice-status-error {
       color: #d64545;
     }
     .zello-voice-disclosure {
       padding: 4px 16px 2px;
       font-size: 10px;
-      color: var(--zello-ink-soft);
+      color: #71829f;
       text-align: center;
       flex: 0 0 auto;
     }
 
     .zello-header-icon-button {
-      background: transparent;
-      border: none;
-      color: var(--zello-primary-ink);
+      color: #dce5ff;
       cursor: pointer;
       padding: 4px;
       opacity: 0.85;

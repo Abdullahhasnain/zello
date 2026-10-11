@@ -20,7 +20,8 @@ const DEFAULT_PRIMARY_COLOR = "#B6602A";
 
 const LAUNCHER_ICON = `
   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M4 4h16v12H7l-3 3V4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M12 2.8l1.45 5.75L19 10l-5.55 1.45L12 17.2l-1.45-5.75L5 10l5.55-1.45L12 2.8z" fill="currentColor"/>
+    <path d="M19 15.5l.6 2.1 2.1.6-2.1.6-.6 2.1-.6-2.1-2.1-.6 2.1-.6.6-2.1z" fill="currentColor"/>
   </svg>
 `;
 
@@ -50,7 +51,11 @@ export class ZelloWidgetElement extends HTMLElement {
   private conversationId: string | null = null;
   protected messages: ChatBubble[] = [];
   protected isOpen = false;
+  private isExpanded = false;
   private isSending = false;
+  // A visual affordance only. The backend action remains the source of truth
+  // and clears this state on any non-successful or completed response.
+  private pendingCartProductId: string | null = null;
   // Set to the just-received assistant reply's `intent` dict on a
   // successful send, reset to null at the start of every handleSend() call
   // (including its early-return guards) — this is how ui/voice-widget-element.ts
@@ -102,8 +107,8 @@ export class ZelloWidgetElement extends HTMLElement {
 
     this.launcherButton = document.createElement("button");
     this.launcherButton.className = `zello-launcher zello-position-${this.config.position}`;
-    this.launcherButton.setAttribute("aria-label", "Open chat");
-    this.launcherButton.innerHTML = LAUNCHER_ICON;
+    this.launcherButton.setAttribute("aria-label", "Ask Zello AI");
+    this.launcherButton.innerHTML = `${LAUNCHER_ICON}<span>Ask Zello AI</span>`;
     this.launcherButton.addEventListener("click", () =>
       this.setOpen(!this.isOpen),
     );
@@ -141,7 +146,18 @@ export class ZelloWidgetElement extends HTMLElement {
 
     this.headerTitleEl = document.createElement("div");
     this.headerTitleEl.className = "zello-header-title";
-    this.headerTitleEl.textContent = "Zello AI · Sales Agent";
+    this.headerTitleEl.innerHTML = "<span class=\"zello-orb\">✦</span><span><strong>Zello AI</strong><small><i></i> Online · Your AI shopping assistant</small></span>";
+
+    const expandButton = document.createElement("button");
+    expandButton.className = "zello-expand-button";
+    expandButton.setAttribute("aria-label", "Expand assistant");
+    expandButton.textContent = "↗";
+    expandButton.addEventListener("click", () => {
+      this.isExpanded = !this.isExpanded;
+      this.panel.classList.toggle("zello-expanded", this.isExpanded);
+      expandButton.textContent = this.isExpanded ? "↙" : "↗";
+      expandButton.setAttribute("aria-label", this.isExpanded ? "Reduce assistant" : "Expand assistant");
+    });
 
     const closeButton = document.createElement("button");
     closeButton.className = "zello-close-button";
@@ -150,6 +166,7 @@ export class ZelloWidgetElement extends HTMLElement {
     closeButton.addEventListener("click", () => this.setOpen(false));
 
     header.appendChild(this.headerTitleEl);
+    header.appendChild(expandButton);
     header.appendChild(closeButton);
     return header;
   }
@@ -275,6 +292,7 @@ export class ZelloWidgetElement extends HTMLElement {
       if (exchange.action?.type === "ADD_TO_CART") {
         assistantBubble.action = exchange.action;
       }
+      this.pendingCartProductId = null;
       this.messages.push(assistantBubble);
       this.lastAssistantIntent = exchange.assistantMessage.intent ?? {};
       this.apiClient.setCachedMessages(this.messages);
@@ -283,6 +301,7 @@ export class ZelloWidgetElement extends HTMLElement {
       // resolve rather than blocking the reply on them.
       void this.attachProductResults(assistantBubble);
     } catch (error) {
+      this.pendingCartProductId = null;
       this.messages = this.messages.filter((m) => m.id !== optimisticId);
       this.renderError("That message couldn't be sent. Please try again.");
       // eslint-disable-next-line no-console
@@ -361,15 +380,18 @@ export class ZelloWidgetElement extends HTMLElement {
 
       if (bubble.products && bubble.products.length > 0) {
         const actionable = bubble === latestProducts && !this.isSending;
-        this.messagesEl.appendChild(buildProductRow(bubble.products, actionable ? (product) => {
-          this.sendSuggestedMessage(`${product.title} ka ek piece cart mein add karo.`);
-        } : undefined));
+        this.messagesEl.appendChild(buildProductRow(bubble.products, {
+          onAdd: actionable ? (product) => this.beginCartAction(product) : undefined,
+          pendingProductId: this.pendingCartProductId,
+          addedProductId: bubble.action?.payload.productId,
+        }));
         if (actionable) {
           const actions = document.createElement("div");
           actions.className = "zello-suggestions";
           const prompts = [
-            ["Recommend for me", "In options mein meri zaroorat aur budget ke liye kaunsa behtar hai? Wajah bhi batao."],
-            ...(bubble.products.length > 1 ? [["Compare options", "In options ko price aur available features ke hisaab se compare karo."]] : []),
+            ["✦ Recommend for me", "In options mein meri zaroorat aur budget ke liye kaunsa behtar hai? Wajah bhi batao."],
+            ...(bubble.products.length > 1 ? [["Compare options", "In options ko price aur available features ke hisaab se compare karo."], ["Cheaper options", "Koi sasta option hai?"]] : []),
+            ["Different colour", "Kya ye kisi aur colour mein available hai?"],
           ];
           for (const [label, prompt] of prompts) {
             const button = document.createElement("button");
@@ -383,6 +405,9 @@ export class ZelloWidgetElement extends HTMLElement {
         }
       }
     }
+    if (this.messages.length === 1 && !this.isSending) {
+      this.messagesEl.appendChild(this.buildQuickChips());
+    }
     this.scrollToBottom();
   }
 
@@ -390,6 +415,35 @@ export class ZelloWidgetElement extends HTMLElement {
     if (this.isSending) return;
     this.inputEl.value = content;
     void this.handleSend();
+  }
+
+  private beginCartAction(product: StorefrontProduct): void {
+    if (this.isSending || product.status !== "active" || product.stockQty <= 0) return;
+    this.pendingCartProductId = product.id;
+    this.renderMessages();
+    this.sendSuggestedMessage(`${product.title} ka ek piece cart mein add karo.`);
+  }
+
+  /** These are conversation starters, not catalog data. They use the same
+   * typed-message path as a shopper's own words and are shown only before a
+   * customer has started a shopping journey. */
+  private buildQuickChips(): HTMLDivElement {
+    const chips = document.createElement("div");
+    chips.className = "zello-suggestions zello-quick-chips";
+    for (const [label, prompt] of [
+      ["👟 Sneakers", "Mujhe sneakers dikhayein"],
+      ["👕 T-Shirts", "Mujhe t-shirts dikhayein"],
+      ["Hoodies", "Mujhe hoodies dikhayein"],
+      ["Jeans", "Mujhe jeans dikhayein"],
+    ]) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "zello-action";
+      chip.textContent = label;
+      chip.addEventListener("click", () => this.sendSuggestedMessage(prompt));
+      chips.appendChild(chip);
+    }
+    return chips;
   }
 
   /** Renders a deterministic receipt card from the completed backend action,
@@ -402,11 +456,14 @@ export class ZelloWidgetElement extends HTMLElement {
     title.textContent = `${action.payload.title} added to cart`;
     card.appendChild(title);
 
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "zello-action";
-    button.textContent = "View Cart / Checkout";
-    button.addEventListener("click", () => {
+    const actions = document.createElement("div");
+    actions.className = "zello-cart-actions";
+
+    const viewCart = document.createElement("button");
+    viewCart.type = "button";
+    viewCart.className = "zello-action";
+    viewCart.textContent = "View cart";
+    viewCart.addEventListener("click", () => {
       if (this.config.storefrontPath) {
         window.location.assign(`${this.config.storefrontPath}/cart`);
         return;
@@ -415,7 +472,25 @@ export class ZelloWidgetElement extends HTMLElement {
         detail: { tenantSlug: this.config.tenantSlug },
       }));
     });
-    card.appendChild(button);
+    actions.appendChild(viewCart);
+
+    const similar = document.createElement("button");
+    similar.type = "button";
+    similar.className = "zello-action";
+    similar.textContent = "Show similar";
+    similar.addEventListener("click", () => {
+      this.sendSuggestedMessage(`Show me similar products to ${action.payload.title}.`);
+    });
+    actions.appendChild(similar);
+
+    const continueShopping = document.createElement("button");
+    continueShopping.type = "button";
+    continueShopping.className = "zello-action";
+    continueShopping.textContent = "Continue shopping";
+    continueShopping.addEventListener("click", () => this.inputEl.focus());
+    actions.appendChild(continueShopping);
+
+    card.appendChild(actions);
     return card;
   }
 
