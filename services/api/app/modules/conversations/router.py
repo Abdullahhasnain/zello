@@ -75,6 +75,16 @@ _FOLLOW_UP_REFERENCE = re.compile(
     re.IGNORECASE,
 )
 
+# A customer speaks in positions because product cards are displayed in a
+# stable order. Keep that interpretation deterministic rather than asking an
+# LLM to remember which card was "second".
+_PRODUCT_POSITION = re.compile(
+    r"\b(?:(?P<first>first|1st|pehla|pehli|pehle|pehlay)|(?P<second>second|2nd|doosra|dusra|dusri)|"
+    r"(?P<recommended>recommend(?:ed)?|suggest(?:ed)?|best))\b|"
+    r"(?:(?P<urdu_first>پہلا|پہلی)|(?P<urdu_second>دوسرا|دوسری)|(?P<urdu_recommended>ریکمینڈ))",
+    re.IGNORECASE,
+)
+
 # Bare fallback question if the planner picks "clarify" but somehow returns
 # no reply text — vanishingly rare, but the customer must still get a turn.
 _FALLBACK_CLARIFY = {
@@ -133,6 +143,14 @@ def _select_cart_product(
         if selected:
             return selected
 
+    position = _PRODUCT_POSITION.search(text)
+    if position:
+        groups = position.groupdict()
+        if (groups.get("first") or groups.get("urdu_first") or groups.get("recommended")) and products:
+            return products[0]
+        if (groups.get("second") or groups.get("urdu_second")) and len(products) > 1:
+            return products[1]
+
     normalized_text = " ".join(re.findall(r"[\w]+", text.casefold()))
     named = [
         product
@@ -142,6 +160,36 @@ def _select_cart_product(
     if len(named) == 1:
         return named[0]
     return products[0] if len(products) == 1 else None
+
+
+async def _keyword_catalog_search(
+    catalog_service: CatalogService,
+    tenant_id: UUID,
+    query: str,
+    *,
+    top_k: int,
+) -> list[Product]:
+    """Safe local fallback for an offline embedding service.
+
+    It is intentionally tenant-scoped and only reads catalog records through
+    the existing service. This keeps a local Ollama sales brain useful even
+    when OpenAI/Gemini embeddings are not configured, without pretending a
+    keyword match is semantic retrieval or changing any database schema.
+    """
+    tokens = {token.casefold() for token in re.findall(r"[\w]+", query) if len(token) > 1}
+    if not tokens:
+        return []
+    products = await catalog_service.list_products(tenant_id, limit=100)
+    scored: list[tuple[int, Product]] = []
+    for product in products:
+        searchable = " ".join(
+            [product.title, product.description or "", *map(str, product.attributes.values())]
+        ).casefold()
+        score = sum(1 for token in tokens if token in searchable)
+        if score:
+            scored.append((score, product))
+    scored.sort(key=lambda item: (-item[0], item[1].title.casefold()))
+    return [product for _, product in scored[:top_k]]
 
 
 async def _load_recent_products(
@@ -460,10 +508,12 @@ async def post_message(
             try:
                 found = await search_service.search_products(conversation.tenant_id, search_query, top_k=20)
             except Exception as exc:  # noqa: BLE001 — an embeddings-provider outage (bad/missing
-                # key, rate limit, network) must degrade this turn to "no products found",
-                # never crash the whole chat with a 500.
+                # key, rate limit, network) must degrade to a real local
+                # catalog lookup, never a 500 or invented products.
                 logger.warning("product_search_failed", conversation_id=str(conversation_id), error=str(exc))
-                found = []
+                found = await _keyword_catalog_search(
+                    catalog_service, conversation.tenant_id, search_query, top_k=20
+                )
 
         comparison_products = []
         if comparison_requested:
@@ -549,6 +599,11 @@ async def post_message(
     merged_context["last_query"] = payload.content
     if matched_product_ids:
         merged_context["last_matched_product_ids"] = matched_product_ids
+        # Search preserves ranked order, so the first real result is the
+        # deterministic default recommendation for phrases such as "jo tum
+        # recommend kar rahe ho". We keep the full ordered list as well for
+        # first/second references and comparisons.
+        merged_context["last_recommended_product_id"] = matched_product_ids[0]
     await conversation_service.update_context(conversation_id, merged_context)
 
     return MessageExchangeRead(

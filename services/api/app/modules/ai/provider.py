@@ -3,16 +3,16 @@ app/modules/search/embedding_provider.py: the orchestrator (orchestrator.py)
 depends on `ChatProvider`, never on a vendor SDK directly, so swapping the
 configured LLM provider means editing dependencies.py alone.
 
-Two providers are implemented — OpenAI and Gemini — selected by the
-`AI_PROVIDER` setting (see app/modules/ai/dependencies.py). Gemini exists
-specifically because its free tier covers real usage with no billing setup,
-unlike OpenAI's pay-as-you-go-only API; a tenant with no budget for OpenAI
-credits can still run the full assistant on `AI_PROVIDER=gemini`.
+OpenAI, Gemini, and a local Ollama provider are selectable through
+`AI_PROVIDER` (see app/modules/ai/dependencies.py).  Every provider shares
+the same ChatProvider boundary, so tenant-scoped catalog grounding and
+deterministic cart actions never become vendor-specific.
 """
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+import httpx
 from openai import AsyncOpenAI
 
 
@@ -91,3 +91,41 @@ class GeminiChatProvider(ChatProvider):
             ),
         )
         return (response.text or "").strip()
+
+
+class OllamaChatProvider(ChatProvider):
+    """Local Ollama adapter.
+
+    It deliberately uses Ollama's OpenAI-compatible *message* shape only at
+    this boundary.  The orchestrator therefore keeps exactly the same
+    grounded prompt, history window, planner parsing, and safe fallback as
+    the hosted providers.  ``stream=False`` is intentional here: the current
+    REST endpoint returns one persisted assistant turn, while speech can
+    begin as soon as that concise turn is available.
+    """
+
+    def __init__(self, base_url: str, model: str, timeout_seconds: float, think: bool = False) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._model = model
+        self._timeout_seconds = timeout_seconds
+        self._think = think
+
+    async def complete(self, messages: list[ChatMessage], *, max_tokens: int, temperature: float) -> str:
+        payload = {
+            "model": self._model,
+            "messages": [{"role": message.role, "content": message.content} for message in messages],
+            "stream": False,
+            "think": self._think,
+            "options": {"temperature": temperature, "num_predict": max_tokens},
+        }
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+                response = await client.post(f"{self._base_url}/api/chat", json=payload)
+                response.raise_for_status()
+                data = response.json()
+        except (httpx.HTTPError, ValueError, TypeError) as exc:
+            raise RuntimeError("Ollama is unavailable or returned an invalid response") from exc
+
+        message = data.get("message") if isinstance(data, dict) else None
+        content = message.get("content") if isinstance(message, dict) else None
+        return content.strip() if isinstance(content, str) else ""

@@ -562,6 +562,8 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
       case "speaking":
         // Start recording while server audio remains active. The recorder's
         // VAD stops it on the first detected customer speech (barge-in).
+        // Browser speech has no VAD/audio buffer to safely duck, so it is
+        // cut immediately on this explicit customer interruption.
         this.startListening();
         return;
       case "processing":
@@ -573,11 +575,19 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
   }
 
   private startListening(): void {
+    const canUseServerRecorder =
+      ServerVoiceRecorder.isSupported() && !this.serverTranscriptionUnavailable;
+    if (this.activeSpeaker === "browser" || !canUseServerRecorder) {
+      // Invalidate the previous callbacks before cancelling. Otherwise a
+      // browser "canceled" event could flip this new listening turn back to
+      // idle while the customer is already speaking.
+      this.speechRequestId += 1;
+      this.speaker.stop();
+      if (!canUseServerRecorder) this.serverSpeaker.stopAudio();
+      this.activeSpeaker = null;
+    }
     this.setVoiceState("listening");
-    if (
-      ServerVoiceRecorder.isSupported() &&
-      !this.serverTranscriptionUnavailable
-    ) {
+    if (canUseServerRecorder) {
       void this.serverRecorder.start({
         onAudio: (audio) => {
           this.setVoiceState("processing");

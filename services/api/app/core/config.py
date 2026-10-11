@@ -69,11 +69,11 @@ class Settings(BaseSettings):
     GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
 
     # --- AI: conversational shopping assistant (Conversation Orchestrator) ---
-    # One switch selects the vendor for BOTH chat replies and search
-    # embeddings below — "openai" or "gemini". Set AI_ASSISTANT_ENABLED=false
-    # to force every conversation onto the deterministic template replies
-    # (app/modules/conversations/reply_composer.py) regardless of which
-    # provider is configured, e.g. for a cost-conscious pilot.
+    # Selects the conversation/planning vendor — "openai", "gemini", or
+    # local "ollama". The existing pgvector search stays on its indexed
+    # OpenAI/Gemini model; an Ollama-only setup gets the safe tenant-scoped
+    # keyword fallback in the conversation route until embeddings are
+    # deliberately re-indexed for a compatible model.
     AI_PROVIDER: str = "openai"
     AI_ASSISTANT_ENABLED: bool = True
     AI_CHAT_MODEL: str = "gpt-4o-mini"
@@ -87,6 +87,10 @@ class Settings(BaseSettings):
     # reply costs real money per call, unlike most endpoints, so it gets its
     # own budget on top of the general API rate limit.
     AI_RATE_LIMIT_PER_MINUTE: int = 15
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_CHAT_MODEL: str = "qwen3:8b"
+    # Ollama can keep its reasoning/private chain out of the customer reply.
+    OLLAMA_THINK: bool = False
 
     # --- Voice transport (server STT + TTS) ---
     # Voice is deliberately separate from AI_PROVIDER: stores may use Gemini

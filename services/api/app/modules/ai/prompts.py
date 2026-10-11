@@ -79,16 +79,20 @@ def build_planner_prompt(
         "box:\n"
         '- "add_to_cart": ONLY when the latest message explicitly asks to add or buy a product — '
         'for example "add to cart", "buy this", "yeh cart mein daal do", "2 piece add kardo", '
-        'or "kharidna hai". Questions, hypothetical requests and negations are NOT permission. Select "
+        'or "kharidna hai". Questions, hypothetical requests and negations are NOT permission. Select '
         "one unambiguous product from the supplied real product list, using its exact UUID. "
         "If unclear, clarify which product. Never place an order or take payment.\n"
-        '- "clarify": choose this when a short, natural question would help you recommend better, '
+        '- "clarify": choose this only when a short, natural question would materially help you '
+        "recommend better, "
         "and fewer than 2 questions have been asked so far. In particular, when the customer has "
         "only named a product type (optionally with a colour) but you still don't know their "
         "style, occasion, or budget, ask ONE such question FIRST instead of searching immediately "
         "— e.g. for \"black shirt\", ask whether they want casual or formal. Ask at most ONE "
         "question, and never re-ask anything already listed in the preferences above.\n"
-        '- "search": choose this once you know enough to show genuinely relevant products (e.g. '
+        '- "search": choose this immediately when the message already gives a useful combination of '
+        "category, brand, colour, size, budget or use case. Never ask again for a detail already "
+        "present in Preferences gathered so far or plainly stated in the latest message. Choose this "
+        "once you know enough to show genuinely relevant products (e.g. "
         "product type plus style/occasion, or a budget), OR 2 questions have already been asked, "
         'OR the customer clearly wants to see products now (e.g. says "dikhao", "show me", '
         '"dikha do").\n\n'
@@ -178,6 +182,9 @@ def build_system_prompt(
         "'Available products' list given to you in this conversation. Never invent a "
         "product, price, or fact that isn't in that list.\n"
         f"{results_rule}"
+        "Treat the supplied product order as the on-screen order. When the customer says first, second, "
+        "this one, or the one you recommended, use the conversation context and supplied products; never "
+        "pretend you can see a product that is not supplied.\n"
         f"{reply_length_rule} The "
         "reply is spoken aloud: do not use Markdown, asterisks, headings or numbered lists. "
         "product cards are shown separately on screen, so don't re-list every product's full "
@@ -198,9 +205,12 @@ def build_system_prompt(
         "5. Comparing: when asked which is better, or to compare two items, compare only products "
         "in the list above, and only on their real price, features, details, and availability. "
         "Recommend one and say briefly why, in terms the customer cares about.\n"
-        "After showing suitable options, offer one helpful next step: compare the options, "
-        "recommend a best fit, or offer to add a specific product to the cart. Ask only one "
-        "question at a time. Do not repeatedly push checkout before the customer has chosen.\n"
+        "After showing suitable options, make a recommendation when the real details support one: connect "
+        "the customer's stated use case to a specific supplied feature, price, or availability. For example, "
+        "say why an option is better for daily use only if its supplied details support that. Then offer one "
+        "helpful next step: compare the options, recommend a best fit, or offer to add a specific product to "
+        "the cart. Ask only one question at a time. Do not repeatedly push checkout before the "
+        "customer has chosen.\n"
         "6. Suggesting extras: you may suggest ONE complementary or related item to go with what "
         "they're considering, but only if it appears in the list above — never conjure a "
         "matching accessory the store doesn't stock.\n"

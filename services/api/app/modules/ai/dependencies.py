@@ -1,6 +1,6 @@
 from app.core.config import Settings, get_settings
 from app.modules.ai.orchestrator import AIOrchestrator
-from app.modules.ai.provider import ChatProvider, GeminiChatProvider, OpenAIChatProvider
+from app.modules.ai.provider import ChatProvider, GeminiChatProvider, OllamaChatProvider, OpenAIChatProvider
 
 
 def _looks_like_a_real_openai_key(api_key: str) -> bool:
@@ -35,8 +35,16 @@ def _build_provider(settings: Settings) -> ChatProvider | None:
             timeout_seconds=settings.AI_REQUEST_TIMEOUT_SECONDS,
         )
 
-    # An unrecognized AI_PROVIDER value falls back to the templated replies
-    # rather than raising at request time.
+    if settings.AI_PROVIDER == "ollama":
+        return OllamaChatProvider(
+            base_url=settings.OLLAMA_BASE_URL,
+            model=settings.OLLAMA_CHAT_MODEL,
+            timeout_seconds=settings.AI_REQUEST_TIMEOUT_SECONDS,
+            think=settings.OLLAMA_THINK,
+        )
+
+    # An unrecognized AI_PROVIDER falls back to templated replies rather than
+    # raising at request time.
     return None
 
 

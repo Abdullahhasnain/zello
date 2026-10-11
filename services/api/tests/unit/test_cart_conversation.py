@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -6,11 +7,32 @@ from uuid import uuid4
 import pytest
 
 from app.domain.entities.conversation import ConversationMessage, MessageRole
+from app.domain.entities.product import Product, ProductStatus
 from app.modules.ai.orchestrator import TurnPlan
 from app.modules.conversations import router
 from app.modules.conversations.schemas import PostMessageRequest
 from app.shared.exceptions import NotFoundError
 from tests.unit.test_commerce_safety import setup_shop
+
+
+def test_cart_reference_resolves_the_second_shown_product():
+    """Card order is persisted in context, so ordinal speech never relies
+    on the LLM inventing a product identity."""
+    _, _, _, first, _ = setup_shop()
+    second = Product(
+        id=uuid4(),
+        tenant_id=first.tenant_id,
+        external_id="second-shoe",
+        title="DEMO Running Shoes",
+        price=Decimal("3990"),
+        currency="PKR",
+        stock_qty=2,
+        status=ProductStatus.ACTIVE,
+    )
+
+    assert router._select_cart_product([first, second], "second wala cart mein daal do", None) == second
+    assert router._select_cart_product([first, second], "pehla add kardo", None) == first
+    assert router._select_cart_product([first, second], "jo recommend kiya woh add kar do", None) == first
 
 
 async def test_voice_cart_action_and_retry_are_one_mutation(monkeypatch):
