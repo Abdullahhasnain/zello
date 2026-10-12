@@ -42,14 +42,20 @@ export function StorefrontHeader({
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-surface/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Link href={`/store/${slug}`} className="flex items-center gap-2">
-          <span
-            className="flex h-8 w-8 items-center justify-center rounded-lg font-display text-sm font-bold text-white"
-            style={{ backgroundColor: primaryColor || "var(--color-accent)" }}
-          >
-            {storeName.charAt(0).toUpperCase()}
+        <Link href={`/store/${slug}`} className="flex items-center gap-3" aria-label="Zello AI store home">
+          {/* The supplied brand art is deliberately cropped to its Z mark here;
+              the full logo is shown in the sales-agent welcome stage below. */}
+          <span className="relative block h-10 w-10 overflow-hidden rounded-xl bg-[#061124] shadow-[0_5px_16px_rgba(20,91,255,.25)]">
+            <img
+              src="/zello-ai-logo.png"
+              alt=""
+              className="absolute h-[88px] w-[88px] max-w-none -left-[24px] -top-[16px]"
+            />
           </span>
-          <span className="font-display text-base font-semibold text-ink">{storeName}</span>
+          <span>
+            <span className="block text-base font-bold tracking-tight text-ink">Zello<span className="bg-gradient-to-r from-[#12bff3] via-[#237cff] to-[#8e4bff] bg-clip-text text-transparent">AI</span></span>
+            <span className="block text-[10px] font-medium tracking-wide text-ink-faint">Talk · Discover · Buy</span>
+          </span>
         </Link>
         <div className="flex items-center gap-2">
           <ThemeToggle />

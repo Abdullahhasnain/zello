@@ -6,18 +6,18 @@
   /* Light theme (default) — same palette as the product's own brand
      artifacts: copper accent for "voice energy", deep teal for the AI/tech
      signal. See docs/architecture for the pitch-deck-derived identity. */
-  --color-bg: #fbfbfa;
+  --color-bg: #f7f9ff;
   --color-surface: #ffffff;
   --color-surface-hover: #f4f3f1;
   --color-border: #e4e2dd;
   --color-ink: #1e2130;
   --color-ink-soft: #5b5e6c;
   --color-ink-faint: #8b8e9c;
-  --color-accent: #b6602a;
-  --color-accent-ink: #7a3f1b;
-  --color-accent-soft: #f5e3d3;
-  --color-accent2: #2b6e62;
-  --color-accent2-soft: #dcebe7;
+  --color-accent: #2378ef;
+  --color-accent-ink: #1454b8;
+  --color-accent-soft: #e7f0ff;
+  --color-accent2: #6946e8;
+  --color-accent2-soft: #ece8ff;
   --color-success: #2e7d4f;
   --color-warning: #b5860a;
   --color-danger: #b1402e;

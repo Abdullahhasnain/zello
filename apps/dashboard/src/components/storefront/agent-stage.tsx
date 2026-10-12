@@ -22,11 +22,16 @@ export function AgentStage({ slug }: { slug: string }) {
     <section className={home ? "mx-auto max-w-5xl px-4 pt-8 sm:px-6 sm:pt-12" : ""} aria-label="Zello sales assistant">
       {home ? (
         <header className="mb-6 text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Your personal AI sales agent</p>
+          <div className="mx-auto mb-4 flex w-fit items-center gap-2 rounded-full border border-[#c7d8ff] bg-[#f2f7ff] px-3 py-1.5 text-xs font-semibold text-[#1768d6] shadow-sm">
+            <span className="relative block h-5 w-5 overflow-hidden rounded-md bg-[#061124]">
+              <img src="/zello-ai-logo.png" alt="" className="absolute h-[44px] w-[44px] max-w-none -left-[12px] -top-[8px]" />
+            </span>
+            YOUR PERSONAL AI SALES AGENT
+          </div>
           <h1 className="mt-3 font-display text-3xl font-semibold text-ink sm:text-5xl">Assalam o Alaikum! Main Zello hoon.</h1>
           <p className="mt-3 text-lg text-ink-soft">Aap kya dhoond rahe hain?</p>
           <p className="mx-auto mt-2 max-w-xl text-sm text-ink-soft">Boliye ya likhiye. Main options dhoondne, compare karne aur aapke budget ke mutabiq choose karne mein madad karunga.</p>
-          <button type="button" disabled={!ready} className="mt-5 rounded-full bg-accent px-6 py-3 text-sm font-semibold text-white disabled:opacity-50" onClick={() => {
+          <button type="button" disabled={!ready} className="mt-5 rounded-full bg-gradient-to-r from-[#176df4] to-[#6646ef] px-6 py-3 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(45,91,237,.28)] transition hover:-translate-y-0.5 disabled:opacity-50" onClick={() => {
             const mic = mount.current?.querySelector("zello-widget")?.shadowRoot?.querySelector<HTMLButtonElement>(".zello-mic-button");
             mic?.scrollIntoView({ block: "nearest", behavior: "smooth" });
             mic?.click();
