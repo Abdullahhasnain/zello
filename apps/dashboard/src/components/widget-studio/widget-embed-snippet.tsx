@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.zello.ai/api/v1";
+const APP_BASE_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+const WIDGET_BUNDLE_URL = `${APP_BASE_URL}/zello-widget.voice.js`;
 
 export function WidgetEmbedSnippet({
   tenantSlug,
@@ -17,11 +19,13 @@ export function WidgetEmbedSnippet({
   const [copied, setCopied] = useState(false);
 
   const snippet = `<script
-  src="https://cdn.zello.ai/widget/zello-widget.text.js"
+  src="${WIDGET_BUNDLE_URL}"
   data-tenant-slug="${tenantSlug}"
   data-api-base-url="${API_BASE_URL}"
   data-language="${language}"
   data-position="${position}"
+  data-voice-mode="browser"
+  data-auto-open="true"
   async
 ></script>`;
 
@@ -40,7 +44,8 @@ export function WidgetEmbedSnippet({
         {copied ? "Copied!" : "Copy embed code"}
       </Button>
       <p className="text-xs text-ink-faint">
-        Paste this before the closing <code>&lt;/body&gt;</code> tag on your storefront.
+        Paste this before the closing <code>&lt;/body&gt;</code> tag on your storefront. The widget opens
+        ready for a voice-first conversation; browsers may ask the shopper for microphone permission.
       </p>
     </div>
   );

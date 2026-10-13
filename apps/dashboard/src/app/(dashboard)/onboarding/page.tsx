@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProductFormDialog } from "@/components/products/product-form-dialog";
 
-const COMING_SOON_CONNECTORS = [
-  { name: "CSV import", description: "Bulk-upload your catalog from a spreadsheet." },
-  { name: "Shopify sync", description: "Keep your Shopify catalog in sync automatically." },
-  { name: "WooCommerce sync", description: "Keep your WooCommerce catalog in sync automatically." },
+const CATALOG_OPTIONS = [
+  { name: "Manual catalog", description: "Add products, inventory, images and variants in Zello now.", status: "Available" },
+  { name: "Catalog API", description: "Sync an existing platform through Zello's authenticated product upsert API.", status: "Available" },
+  { name: "Shopify sync", description: "Automatic OAuth product and cart sync is the next connector.", status: "Planned" },
+  { name: "WooCommerce sync", description: "Automatic REST product and cart sync follows the Shopify launch.", status: "Planned" },
 ];
 
 export default async function OnboardingPage() {
@@ -43,10 +44,11 @@ export default async function OnboardingPage() {
           </CardHeader>
           <CardContent>
             <p className="mb-4 text-sm text-ink-soft">
-              Add products manually to get started right away. Automated connectors are on the way.
+              Add products manually now, or use the authenticated catalog API from an existing platform. Zello
+              only recommends products that exist in this store's catalog.
             </p>
             <div className="mb-4 flex flex-wrap gap-3">
-              {COMING_SOON_CONNECTORS.map((connector) => (
+              {CATALOG_OPTIONS.map((connector) => (
                 <div
                   key={connector.name}
                   className="flex min-w-[180px] flex-1 items-center justify-between gap-3 rounded-lg border border-dashed border-border px-3 py-2.5"
@@ -55,7 +57,7 @@ export default async function OnboardingPage() {
                     <p className="text-sm font-medium text-ink-soft">{connector.name}</p>
                     <p className="text-xs text-ink-faint">{connector.description}</p>
                   </div>
-                  <Badge tone="neutral">Coming soon</Badge>
+                  <Badge tone={connector.status === "Available" ? "success" : "neutral"}>{connector.status}</Badge>
                 </div>
               ))}
             </div>

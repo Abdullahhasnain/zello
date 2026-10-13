@@ -25,3 +25,8 @@ class ConversionSummary(CamelModel):
     total_conversations: int
     total_orders: int
     conversion_rate: float
+    assistant_replies: int = 0
+    cart_additions: int = 0
+    cart_add_failures: int = 0
+    cart_action_success_rate: float = 0.0
+    median_reply_latency_ms: int | None = None

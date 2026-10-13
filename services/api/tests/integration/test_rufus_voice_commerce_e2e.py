@@ -27,6 +27,7 @@ from app.domain.entities.conversation import (
 from app.domain.entities.product import Product, ProductStatus
 from app.modules.ai.dependencies import get_ai_orchestrator
 from app.modules.ai.orchestrator import AIOrchestrator
+from app.modules.analytics.dependencies import get_analytics_service
 from app.modules.catalog.dependencies import get_catalog_service_for_customer
 from app.modules.conversations.dependencies import get_conversation_service_for_customer
 from app.modules.orders.dependencies import get_order_service_for_customer
@@ -120,6 +121,14 @@ class FakeTTSProvider:
         yield b"ID3-fake-mp3"
 
 
+class InMemoryAnalyticsService:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict]] = []
+
+    async def record_event(self, _tenant_id: UUID, event_type: str, payload: dict) -> None:
+        self.events.append((event_type, payload))
+
+
 @pytest.fixture
 def smoke_app(monkeypatch: pytest.MonkeyPatch) -> tuple[FastAPI, Conversation, Product, Product]:
     """Create the production router graph with all external services overridden."""
@@ -192,6 +201,7 @@ def smoke_app(monkeypatch: pytest.MonkeyPatch) -> tuple[FastAPI, Conversation, P
     tenant = SimpleNamespace(get_tenant=get_tenant)
     orchestrator = AIOrchestrator(None, max_tokens=100, temperature=0, history_turns=5)
     voice = VoiceService(FakeTTSProvider(), max_audio_bytes=1024)
+    analytics = InMemoryAnalyticsService()
 
     async def allow_rate_limit(*_args: object, **_kwargs: object) -> None:
         return None
@@ -213,6 +223,7 @@ def smoke_app(monkeypatch: pytest.MonkeyPatch) -> tuple[FastAPI, Conversation, P
         get_tenant_service_for_customer: lambda: tenant,
         get_ai_orchestrator: lambda: orchestrator,
         get_order_service_for_customer: lambda: orders,
+        get_analytics_service: lambda: analytics,
         get_voice_service: lambda: voice,
     }
     yield app, conversation, product_a, product_b

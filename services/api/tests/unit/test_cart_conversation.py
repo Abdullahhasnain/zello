@@ -79,7 +79,7 @@ async def test_voice_cart_action_and_retry_are_one_mutation(monkeypatch):
     monkeypatch.setattr(router, "get_redis_client", lambda: None)
     monkeypatch.setattr(router, "enforce_conversation_rate_limit", AsyncMock(return_value=True))
     payload = PostMessageRequest(content="ye cart mein daal do", cart_id=cart.id, request_id=uuid4())
-    args = (conversation.id, payload, auth, conversations, None, catalog, tenants, ai, orders)
+    args = (conversation.id, payload, auth, conversations, None, catalog, tenants, ai, orders, None)
     result = await router.post_message(*args)
     assert result.assistant_message.intent["action"] == "add_to_cart"
     assert result.assistant_message.intent["cart_count"] == 2
@@ -99,6 +99,7 @@ async def test_other_customer_cannot_append_to_conversation():
             PostMessageRequest(content="hello"),
             SimpleNamespace(subject_id=str(uuid4())),
             service,
+            None,
             None,
             None,
             None,

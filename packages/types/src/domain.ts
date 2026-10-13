@@ -287,4 +287,9 @@ export interface ConversionSummary {
   totalConversations: number;
   totalOrders: number;
   conversionRate: number;
+  assistantReplies: number;
+  cartAdditions: number;
+  cartAddFailures: number;
+  cartActionSuccessRate: number;
+  medianReplyLatencyMs: number | null;
 }

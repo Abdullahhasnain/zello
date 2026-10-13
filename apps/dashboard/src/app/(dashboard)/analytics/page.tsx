@@ -34,8 +34,15 @@ export default async function AnalyticsPage() {
     <div>
       <PageHeader title="Analytics" description="Conversion performance and catalog health at a glance." />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard label="Total conversations" value={summary.totalConversations.toLocaleString()} />
+        <StatCard label="Assistant replies" value={summary.assistantReplies.toLocaleString()} />
+        <StatCard
+          label="Median reply latency"
+          value={summary.medianReplyLatencyMs === null ? "No data" : `${summary.medianReplyLatencyMs} ms`}
+        />
+        <StatCard label="Cart additions" value={summary.cartAdditions.toLocaleString()} />
+        <StatCard label="Cart action success" value={`${(summary.cartActionSuccessRate * 100).toFixed(1)}%`} />
         <StatCard label="Total orders" value={summary.totalOrders.toLocaleString()} />
         <StatCard label="Conversion rate" value={`${(summary.conversionRate * 100).toFixed(1)}%`} />
       </div>

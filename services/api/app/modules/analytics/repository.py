@@ -30,3 +30,23 @@ class AnalyticsEventRepository:
             )
         )
         return result.scalar_one()
+
+    async def list_payloads_by_type(
+        self, tenant_id: UUID, event_type: str, *, limit: int = 500
+    ) -> list[dict]:
+        """Return recent event payloads for lightweight launch metrics.
+
+        The event stream is intentionally append-only.  Keeping aggregation
+        here bounded means the dashboard can expose a useful soft-launch
+        latency signal without turning a customer request into an OLAP job.
+        """
+        result = await self._session.execute(
+            select(AnalyticsEventModel.payload)
+            .where(
+                AnalyticsEventModel.tenant_id == tenant_id,
+                AnalyticsEventModel.event_type == event_type,
+            )
+            .order_by(AnalyticsEventModel.occurred_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars())

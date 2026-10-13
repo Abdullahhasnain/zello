@@ -1,5 +1,6 @@
 import asyncio
 import re
+import time
 from typing import Annotated
 from uuid import UUID
 
@@ -14,6 +15,8 @@ from app.domain.entities.product import Product
 from app.modules.ai.dependencies import get_ai_orchestrator
 from app.modules.ai.orchestrator import AIOrchestrator
 from app.modules.ai.prompts import format_known_preferences
+from app.modules.analytics.dependencies import get_analytics_service
+from app.modules.analytics.service import AnalyticsService
 from app.modules.catalog.dependencies import get_catalog_service_for_customer
 from app.modules.catalog.service import CatalogService
 from app.modules.conversations.dependencies import (
@@ -103,6 +106,26 @@ _FALLBACK_CLARIFY = {
 
 def _fallback_clarify(language: str) -> str:
     return _FALLBACK_CLARIFY.get(language, _FALLBACK_CLARIFY["english"])
+
+
+async def _record_launch_event(
+    analytics_service: AnalyticsService | None,
+    tenant_id: UUID,
+    event_type: str,
+    payload: dict,
+) -> None:
+    """Append operational signals without making customer chat fragile.
+
+    Conversation and cart work remain the source of truth.  Analytics is
+    deliberately best-effort so a metrics outage never causes a shopper to
+    lose a recommendation or a confirmed cart action.
+    """
+    if analytics_service is None:
+        return
+    try:
+        await analytics_service.record_event(tenant_id, event_type, payload)
+    except Exception as exc:  # noqa: BLE001 - observability must not break commerce
+        logger.warning("launch_analytics_record_failed", event_type=event_type, error=str(exc))
 
 
 def _extract_budget(value: object) -> float | None:
@@ -283,6 +306,7 @@ async def start_conversation(
     auth: Annotated[AuthContext, Depends(get_current_customer_auth)],
     conversation_service: Annotated[ConversationService, Depends(get_conversation_service_for_customer)],
     tenant_service: Annotated[TenantService, Depends(get_tenant_service_for_customer)],
+    analytics_service: Annotated[AnalyticsService, Depends(get_analytics_service)],
     channel: ConversationChannel = ConversationChannel.WIDGET,
     language: str = "roman_urdu",
 ) -> ConversationStartResponse:
@@ -297,6 +321,12 @@ async def start_conversation(
     greeting_text = compose_greeting(language, tenant.branding.get("greeting_persona"))
     greeting = await conversation_service.record_message(
         conversation.id, MessageRole.ASSISTANT, greeting_text
+    )
+    await _record_launch_event(
+        analytics_service,
+        auth.tenant_id,
+        "conversation_started",
+        {"channel": channel.value, "language": language},
     )
     return ConversationStartResponse(
         conversation=ConversationRead.model_validate(conversation),
@@ -321,6 +351,7 @@ async def post_message(
     tenant_service: Annotated[TenantService, Depends(get_tenant_service_for_customer)],
     ai_orchestrator: Annotated[AIOrchestrator, Depends(get_ai_orchestrator)],
     order_service: Annotated[OrderService, Depends(get_order_service_for_customer)],
+    analytics_service: Annotated[AnalyticsService, Depends(get_analytics_service)],
 ) -> MessageExchangeRead:
     """Handles a turn like a salesperson, in two phases (see
     app/modules/ai/orchestrator.py):
@@ -342,6 +373,7 @@ async def post_message(
     Language is kept stable across a conversation: a short answer like
     "Casual" that detects as English won't flip an established Roman-Urdu
     chat — only a positive non-English signal switches it."""
+    turn_started_at = time.perf_counter()
     conversation = await conversation_service.get_conversation(conversation_id)
     if conversation.customer_id != UUID(_auth.subject_id):
         raise NotFoundError("Conversation not found")
@@ -484,12 +516,37 @@ async def post_message(
                 }
                 merged_context["cart_id"] = str(cart.id)
                 reply_text = compose_cart_confirmation(turn_language, selected, quantity)
+                await _record_launch_event(
+                    analytics_service,
+                    conversation.tenant_id,
+                    "cart_add_succeeded",
+                    {"quantity": quantity},
+                )
             except ValidationError:
                 reply_text = "I couldn't add that quantity. Please check the available stock and your cart."
                 if turn_language == "roman_urdu":
                     reply_text = (
                         "Itni quantity add nahi ho saki. Available stock aur apna cart check kar lein."
                     )
+                await _record_launch_event(
+                    analytics_service,
+                    conversation.tenant_id,
+                    "cart_add_failed",
+                    {"reason": "validation"},
+                )
+            except Exception as exc:  # noqa: BLE001 - a cart outage must never become a false success
+                logger.exception("cart_add_failed", conversation_id=str(conversation_id), error=str(exc))
+                reply_text = "I couldn't update your cart right now. Please try again in a moment."
+                if turn_language == "roman_urdu":
+                    reply_text = "Abhi cart update nahi ho saka. Thori dair baad dobara try kar lein."
+                elif turn_language == "urdu":
+                    reply_text = "اس وقت کارٹ اپ ڈیٹ نہیں ہو سکا۔ براہ کرم تھوڑی دیر بعد دوبارہ کوشش کریں۔"
+                await _record_launch_event(
+                    analytics_service,
+                    conversation.tenant_id,
+                    "cart_add_failed",
+                    {"reason": "service_error"},
+                )
     elif is_clarify:
         # Salesperson question turn: no catalog search, no product cards —
         # an empty matched_product_ids is what tells the widget to render
@@ -600,6 +657,7 @@ async def post_message(
         # earn fresh clarifying questions.
         merged_context["clarification_count"] = 0
 
+    response_latency_ms = round((time.perf_counter() - turn_started_at) * 1000)
     assistant_message = await conversation_service.record_message(
         conversation_id,
         MessageRole.ASSISTANT,
@@ -613,7 +671,20 @@ async def post_message(
             "ai_generated": ai_generated,
             "action": "add_to_cart" if cart_intent else ("clarify" if is_clarify or is_cart else "search"),
             "request_id": str(payload.request_id) if payload.request_id else None,
+            "response_latency_ms": response_latency_ms,
             **cart_intent,
+        },
+    )
+
+    await _record_launch_event(
+        analytics_service,
+        conversation.tenant_id,
+        "assistant_reply_completed",
+        {
+            "response_latency_ms": response_latency_ms,
+            "ai_generated": ai_generated,
+            "matched_product_count": len(matched_product_ids),
+            "comparison": comparison_requested,
         },
     )
 
