@@ -186,7 +186,10 @@ def smoke_app(monkeypatch: pytest.MonkeyPatch) -> tuple[FastAPI, Conversation, P
         role=None,
         raw_claims={},
     )
-    tenant = SimpleNamespace(name="Smoke Store", branding={})
+    async def get_tenant(_tenant_id: UUID) -> SimpleNamespace:
+        return SimpleNamespace(name="Smoke Store", branding={})
+
+    tenant = SimpleNamespace(get_tenant=get_tenant)
     orchestrator = AIOrchestrator(None, max_tokens=100, temperature=0, history_turns=5)
     voice = VoiceService(FakeTTSProvider(), max_audio_bytes=1024)
 

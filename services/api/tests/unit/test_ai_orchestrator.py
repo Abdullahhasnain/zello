@@ -97,7 +97,7 @@ async def test_falls_back_to_template_when_provider_raises() -> None:
     # The deterministic reply_composer path, not an exception surfacing —
     # and ai_generated must say so, even though a provider IS configured.
     assert "Kurta" in reply.text
-    assert "2500" in reply.text
+    assert "2,500" in reply.text
     assert reply.ai_generated is False
 
 
@@ -138,7 +138,7 @@ async def test_product_context_is_grounded_in_actual_search_results() -> None:
     system_message = provider.last_messages[0]
     assert system_message.role == "system"
     assert "Unique Product Name XYZ" in system_message.content
-    assert "4999" in system_message.content
+    assert "4,999" in system_message.content
 
 
 async def test_exact_match_prompt_does_not_frame_products_as_alternatives() -> None:
