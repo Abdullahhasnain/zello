@@ -45,7 +45,7 @@ export default async function OnboardingPage() {
           <CardContent>
             <p className="mb-4 text-sm text-ink-soft">
               Add products manually now, or use the authenticated catalog API from an existing platform. Zello
-              only recommends products that exist in this store's catalog.
+              only recommends products that exist in this store&apos;s catalog.
             </p>
             <div className="mb-4 flex flex-wrap gap-3">
               {CATALOG_OPTIONS.map((connector) => (
