@@ -37,6 +37,7 @@ export interface TenantBranding {
   primaryColor?: string;
   greetingPersona?: string;
   languageMix?: Array<"roman_urdu" | "urdu" | "english">;
+  selectedPlan?: "founding" | "growth" | "pro" | "enterprise";
 }
 
 export interface Tenant {

@@ -17,7 +17,7 @@ function slugify(value: string): string {
     .replace(/^-|-$/g, "");
 }
 
-export function CreateStoreForm() {
+export function CreateStoreForm({ selectedPlan = "growth" }: { selectedPlan?: string }) {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(createStoreAction, INITIAL_ACTION_STATE);
   const [name, setName] = useState("");
@@ -33,6 +33,8 @@ export function CreateStoreForm() {
 
   return (
     <form action={formAction} className="space-y-4">
+      <input type="hidden" name="selectedPlan" value={selectedPlan} />
+      <p className="rounded-lg bg-accent-soft px-3 py-2 text-sm text-ink">Selected plan: <strong className="capitalize">{selectedPlan}</strong>. Activation is confirmed by Zello; no automatic charge is made.</p>
       <div>
         <Label htmlFor="name">Store name</Label>
         <Input

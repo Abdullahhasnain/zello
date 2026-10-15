@@ -4,7 +4,8 @@ import { getMyProfile } from "@/lib/api/users";
 import { ApiError } from "@/lib/api-client";
 import { CreateStoreForm } from "@/components/stores/create-store-form";
 
-export default async function CreateStorePage() {
+export default async function CreateStorePage({ searchParams }: { searchParams: Promise<{ plan?: string }> }) {
+  const { plan } = await searchParams;
   const userId = await getStaffUserId();
   if (!userId) redirect("/sign-in");
 
@@ -30,7 +31,7 @@ export default async function CreateStorePage() {
             One last step — give your store a name and you&apos;re in.
           </p>
         </div>
-        <CreateStoreForm />
+        <CreateStoreForm selectedPlan={plan} />
       </div>
     </div>
   );

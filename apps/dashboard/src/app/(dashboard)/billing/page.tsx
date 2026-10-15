@@ -1,4 +1,5 @@
 import { getMyProfile } from "@/lib/api/users";
+import { getMyTenant } from "@/lib/api/tenants";
 import { getSubscription, listInvoices, listPendingCommission } from "@/lib/api/billing";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge, statusTone } from "@/components/ui/badge";
@@ -31,20 +32,21 @@ export default async function BillingPage() {
     );
   }
 
-  const [subscription, invoices, commission] = await Promise.all([
+  const [subscription, invoices, commission, tenant] = await Promise.all([
     getSubscription(),
     listInvoices(),
     listPendingCommission(),
+    getMyTenant(),
   ]);
 
   return (
     <div>
-      <PageHeader title="Billing" description="Subscription, invoices, and commission." />
+      <PageHeader title="Plan & Usage" description="Your selected plan, trial status, and usage visibility." />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Subscription</CardTitle>
+            <CardTitle>Current plan</CardTitle>
           </CardHeader>
           <CardContent>
             {subscription ? (
@@ -67,7 +69,7 @@ export default async function BillingPage() {
                 ) : null}
               </div>
             ) : (
-              <EmptyState title="No active subscription" description="Contact your Zello AI account manager to get set up." />
+              <div className="space-y-3 text-sm"><p className="text-ink">Selected plan: <strong className="capitalize">{String(tenant.branding.selectedPlan ?? "growth")}</strong></p><p className="text-ink-soft">Activation and billing are completed only after Zello confirms your plan. No automatic charge is made.</p><a className="font-medium text-accent" href="mailto:hello@zello.ai?subject=Zello%20AI%20plan%20activation">Contact Zello to activate or upgrade →</a></div>
             )}
           </CardContent>
         </Card>

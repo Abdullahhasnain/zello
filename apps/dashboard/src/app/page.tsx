@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { MarketingHeader } from "@/components/marketing/marketing-header";
+import { PRICING_PLANS } from "@/lib/pricing";
 
 const PROBLEM_STATS = [
   { value: "68%", label: "Cart abandonment", detail: "Rigid keyword filters confuse shoppers who leave without buying." },
@@ -19,8 +20,8 @@ const SOLUTION_FEATURES = [
     description: "Understands intent, recommends products, and guides the shopper's journey turn by turn.",
   },
   {
-    title: "Autonomous checkout",
-    description: "Adds to cart and completes payment — zero manual steps once a tenant reaches Phase 4.",
+    title: "Checkout assistance",
+    description: "Guides shoppers to cart and Cash on Delivery checkout with clear confirmation.",
   },
   {
     title: "Unified partner inventory",
@@ -34,7 +35,7 @@ const HOW_IT_WORKS = [
   { step: "3", title: "Understands", description: "Extracts intent, budget, and preferences from what they said." },
   { step: "4", title: "Finds", description: "Searches your live catalog semantically — Roman Urdu included." },
   { step: "5", title: "Adds to cart", description: "Reserves the item the moment the shopper confirms." },
-  { step: "6", title: "Checks out", description: "Completes payment via JazzCash or Easypaisa — no clicks needed." },
+  { step: "6", title: "Checks out", description: "Guides customers through Cash on Delivery checkout. Wallet payments are coming soon." },
 ];
 
 const MARKET_STATS = [
@@ -44,26 +45,6 @@ const MARKET_STATS = [
   { value: "$151B", label: "Global voice commerce market (2025)" },
 ];
 
-const PRICING = [
-  {
-    name: "SaaS Licensing",
-    price: "Rs. 15,000",
-    period: "per store / month",
-    description: "Recurring subscription covering the widget, catalog sync, and dashboard for one store.",
-  },
-  {
-    name: "Transaction Commission",
-    price: "3–5%",
-    period: "per completed sale",
-    description: "Performance-based revenue tied directly to sales the assistant actually closes.",
-  },
-  {
-    name: "Premium Analytics",
-    price: "Custom",
-    period: "enterprise pricing",
-    description: "Deeper customer behavior insights for larger retail partners.",
-  },
-];
 
 export default function LandingPage() {
   return (
@@ -81,7 +62,7 @@ export default function LandingPage() {
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-balance text-base text-ink-soft sm:text-lg">
             A customer lands on your store. Zello AI greets them by voice, listens to what they need,
-            finds the right product, and completes checkout — entirely through natural conversation in
+            finds the right product, and assists with Cash on Delivery checkout — entirely through natural conversation in
             Roman Urdu, Urdu, or English.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -144,7 +125,7 @@ export default function LandingPage() {
           <div className="mb-10 max-w-2xl">
             <span className="text-xs font-semibold uppercase tracking-wide text-accent">How it works</span>
             <h2 className="mt-2 font-display text-2xl font-semibold text-ink sm:text-3xl">
-              From greeting to checkout — fully autonomous
+              From greeting to checkout assistance
             </h2>
           </div>
           <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
@@ -187,19 +168,23 @@ export default function LandingPage() {
           <div className="mb-10 max-w-2xl">
             <span className="text-xs font-semibold uppercase tracking-wide text-accent">Pricing</span>
             <h2 className="mt-2 font-display text-2xl font-semibold text-ink sm:text-3xl">
-              Three revenue streams, built for recurring growth
+              Simple pricing that grows with your store
             </h2>
           </div>
-          <div className="grid gap-5 sm:grid-cols-3">
-            {PRICING.map((tier) => (
-              <Card key={tier.name} className="flex flex-col p-6">
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-ink-soft">{tier.name}</h3>
-                <p className="mt-3 font-display text-3xl font-bold text-ink">{tier.price}</p>
-                <p className="text-xs text-ink-faint">{tier.period}</p>
-                <p className="mt-3 flex-1 text-sm text-ink-soft">{tier.description}</p>
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+            {PRICING_PLANS.map((tier) => (
+              <Card key={tier.id} className={`flex flex-col p-6 ${tier.featured ? "border-2 border-accent shadow-card" : ""}`}>
+                {tier.badge ? <span className="mb-3 w-fit rounded-full bg-accent-soft px-2 py-1 text-xs font-semibold text-accent-ink">{tier.badge}</span> : null}
+                <h3 className="text-lg font-semibold text-ink">{tier.name}</h3>
+                <p className="mt-3 font-display text-2xl font-bold text-ink">{tier.price}</p>
+                <ul className="mt-4 flex-1 space-y-2 text-sm text-ink-soft">{tier.features.map((feature) => <li key={feature}>✓ {feature}</li>)}</ul>
+                <Link href={tier.id === "enterprise" ? "mailto:hello@zello.ai?subject=Enterprise%20Zello%20AI" : `/sign-up?plan=${tier.id}`} className="mt-6"><Button variant={tier.featured ? "primary" : "secondary"} className="w-full">{tier.cta}</Button></Link>
               </Card>
             ))}
           </div>
+          <p className="mt-8 text-center text-sm font-medium text-ink">14-day free pilot · No credit card required · Cancel anytime</p>
+          <p className="mt-2 text-center text-xs text-ink-faint">Voice and AI usage limits depend on the selected plan. We will always notify customers before any additional usage charges.</p>
+          <div className="mt-10 grid gap-4 sm:grid-cols-2"><Card className="p-5"><h3 className="font-semibold text-ink">Pricing FAQ</h3><p className="mt-3 text-sm text-ink-soft"><strong>Is setup included?</strong> Setup is free for founding customers. Custom integrations may require a one-time implementation fee.</p><p className="mt-3 text-sm text-ink-soft"><strong>Does Zello take commission on sales?</strong> No commission is charged on standard monthly plans.</p></Card><Card className="p-5"><p className="text-sm text-ink-soft"><strong>What happens after the free pilot?</strong> Select a paid plan or stop using Zello—no automatic charge.</p><p className="mt-3 text-sm text-ink-soft"><strong>Are JazzCash and Easypaisa included?</strong> Coming soon; MVP supports COD checkout assistance.</p><p className="mt-3 text-sm text-ink-soft"><strong>Custom website?</strong> Available on Pro and Enterprise.</p></Card></div>
         </div>
       </section>
 

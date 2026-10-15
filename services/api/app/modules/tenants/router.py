@@ -50,7 +50,7 @@ async def create_my_store(
     if existing_user is not None:
         raise ConflictError("This account is already linked to a store")
 
-    tenant = await tenant_service.create_tenant(payload.name, payload.slug)
+    tenant = await tenant_service.create_tenant(payload.name, payload.slug, payload.selected_plan)
     await user_service.get_or_create_store_user(clerk_user_id, payload.email, tenant.id)
     return TenantRead.model_validate(tenant)
 

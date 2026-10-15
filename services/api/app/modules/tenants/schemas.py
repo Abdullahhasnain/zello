@@ -15,6 +15,7 @@ class TenantBranding(CamelModel):
     primary_color: str | None = None
     greeting_persona: str | None = None
     language_mix: list[str] = []
+    selected_plan: str | None = None
 
 
 class TenantRead(CamelModel):
@@ -39,6 +40,7 @@ class TenantSignup(CamelModel):
     name: str
     slug: str
     email: str
+    selected_plan: str = "growth"
 
 
 class TenantPublicRead(CamelModel):

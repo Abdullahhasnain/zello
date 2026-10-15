@@ -14,7 +14,7 @@ class TenantService:
     def __init__(self, tenant_repository: TenantRepository) -> None:
         self._tenants = tenant_repository
 
-    async def create_tenant(self, name: str, slug: str) -> Tenant:
+    async def create_tenant(self, name: str, slug: str, selected_plan: str | None = None) -> Tenant:
         existing = await self._tenants.get_by_slug(slug)
         if existing is not None:
             raise ConflictError(f"A tenant with slug '{slug}' already exists")
@@ -25,6 +25,7 @@ class TenantService:
             slug=slug,
             status=TenantStatus.PILOT,
             phase=StorePhase.PHASE_1_TEXT_BETA,
+            branding={"selected_plan": selected_plan or "growth"},
         )
         return await self._tenants.add(tenant)
 

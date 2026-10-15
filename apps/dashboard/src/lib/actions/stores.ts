@@ -22,6 +22,7 @@ export async function createStoreAction(_prev: ActionState, formData: FormData):
           .trim()
           .toLowerCase(),
         email,
+        selectedPlan: String(formData.get("selectedPlan") ?? "growth"),
       }),
     });
     return { success: true };
