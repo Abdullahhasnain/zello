@@ -5,6 +5,7 @@ import re
 from app.domain.entities.product import Product, ProductStatus
 
 _COLORS = {
+    "black": "black",
     "kala": "black",
     "kaala": "black",
     "کالا": "black",
@@ -14,8 +15,21 @@ _COLORS = {
     "neela": "blue",
     "نیلا": "blue",
     "navy blue": "navy",
+    "navy": "navy",
+    "blue": "blue",
+    "brown": "brown",
     "bhura": "brown",
     "بھورا": "brown",
+}
+
+_QUERY_ALIASES = {
+    "kale": "black",
+    "kaale": "black",
+    "kali": "black",
+    "jootay": "shoes",
+    "joota": "shoes",
+    "sneaker": "sneakers",
+    "saste": "cheap",
 }
 
 _CATEGORIES = {
@@ -125,6 +139,32 @@ def _comparison_text(value: str) -> str:
 def _normal(value: object) -> str:
     text = str(value).strip().lower()
     return _COLORS.get(text, text)
+
+
+def extract_explicit_preferences(text: str) -> dict[str, str]:
+    """Deterministic attributes stated by a shopper.
+
+    These are used as hard filters after semantic retrieval: a vector match
+    must never turn an explicit request for black, size 42 shoes into brown
+    formal shoes. The LLM can still add richer preferences, but it cannot
+    erase a literal colour/size/category the shopper supplied.
+    """
+    normalized = _comparison_text(text)
+    result: dict[str, str] = {}
+    for alias, canonical in _QUERY_ALIASES.items():
+        normalized = re.sub(rf"\b{re.escape(alias)}\b", canonical, normalized)
+    for spoken, canonical in _COLORS.items():
+        if re.search(rf"\b{re.escape(spoken)}\b", normalized):
+            result["color"] = canonical
+            break
+    size = re.search(r"\b(?:size\s*)?(?:eu\s*)?(3[6-9]|4[0-8])\b", normalized)
+    if size:
+        result["size"] = size.group(1)
+    for category, terms in _CATEGORIES.items():
+        if any(re.search(rf"\b{re.escape(term)}\b", normalized) for term in terms):
+            result["category"] = category
+            break
+    return result
 
 
 def matches_preferences(product: Product, preferences: dict) -> bool:

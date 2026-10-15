@@ -25,6 +25,11 @@ def _cart_to_entity(model: CartModel) -> Cart:
         tenant_id=model.tenant_id,
         status=CartStatus(model.status),
         conversation_id=model.conversation_id,
+        customer_name=model.customer_name,
+        customer_phone=model.customer_phone,
+        delivery_address=model.delivery_address,
+        delivery_city=model.delivery_city,
+        order_notes=model.order_notes,
         customer_id=model.customer_id,
     )
 
@@ -198,6 +203,11 @@ class SqlAlchemyOrderRepository(OrderRepository):
             currency=entity.currency,
             payment_method=entity.payment_method.value,
             payment_status=entity.payment_status.value,
+            customer_name=entity.customer_name,
+            customer_phone=entity.customer_phone,
+            delivery_address=entity.delivery_address,
+            delivery_city=entity.delivery_city,
+            order_notes=entity.order_notes,
         )
         self._session.add(model)
         await self._session.flush()

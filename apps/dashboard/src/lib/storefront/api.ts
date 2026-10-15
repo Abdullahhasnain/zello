@@ -191,12 +191,20 @@ export function removeCartItem(slug: string, cartId: string, itemId: string): Pr
 
 // --- Checkout ---
 
-export async function checkout(slug: string, paymentMethod: string): Promise<Order> {
+export interface CheckoutDetails {
+  customerName: string;
+  customerPhone: string;
+  deliveryAddress: string;
+  deliveryCity: string;
+  orderNotes?: string;
+}
+
+export async function checkout(slug: string, paymentMethod: string, details: CheckoutDetails): Promise<Order> {
   const cartId = storedCartId(slug);
   if (!cartId) throw new StorefrontApiError(400, "Your cart is empty");
   const order = await storefrontFetch<Order>(slug, "/orders/checkout", {
     method: "POST",
-    body: JSON.stringify({ cartId, paymentMethod }),
+    body: JSON.stringify({ cartId, paymentMethod, ...details }),
   });
   // The cart converted into an order — next add-to-cart starts fresh.
   localStorage.removeItem(cartKey(slug));

@@ -139,6 +139,11 @@ class OrderService:
         tenant_id: UUID,
         cart_id: UUID,
         payment_method: PaymentProvider,
+        customer_name: str = "",
+        customer_phone: str = "",
+        delivery_address: str = "",
+        delivery_city: str = "",
+        order_notes: str | None = None,
         *,
         confidence: float | None = None,
         confirmed_by_customer: bool = True,
@@ -185,6 +190,11 @@ class OrderService:
             cart_id=cart_id,
             customer_id=cart.customer_id,
             conversation_id=cart.conversation_id,
+            customer_name=customer_name,
+            customer_phone=customer_phone,
+            delivery_address=delivery_address,
+            delivery_city=delivery_city,
+            order_notes=order_notes,
         )
         order = await self._orders.add(order)
         for product, quantity in products:

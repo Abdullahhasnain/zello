@@ -38,6 +38,11 @@ class Cart:
     tenant_id: UUID
     status: CartStatus
     conversation_id: UUID | None = None
+    customer_name: str | None = None
+    customer_phone: str | None = None
+    delivery_address: str | None = None
+    delivery_city: str | None = None
+    order_notes: str | None = None
     customer_id: UUID | None = None
 
 

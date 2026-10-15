@@ -25,6 +25,7 @@ from app.modules.conversations.dependencies import (
 )
 from app.modules.conversations.language import response_language
 from app.modules.conversations.product_matching import (
+    extract_explicit_preferences,
     extract_comparison_terms,
     is_comparison_intent,
     match_comparison_products,
@@ -210,7 +211,12 @@ async def _keyword_catalog_search(
     when OpenAI/Gemini embeddings are not configured, without pretending a
     keyword match is semantic retrieval or changing any database schema.
     """
-    tokens = {token.casefold() for token in re.findall(r"[\w]+", query) if len(token) > 1}
+    aliases = {"kale": "black", "kaale": "black", "kali": "black", "jootay": "shoes", "joota": "shoes"}
+    tokens = {
+        aliases.get(token.casefold(), token.casefold())
+        for token in re.findall(r"[\w]+", query)
+        if len(token) > 1
+    }
     if not tokens:
         return []
     products = await catalog_service.list_products(tenant_id, limit=100)
@@ -443,9 +449,13 @@ async def post_message(
     if plan and plan.slots.get("category") and plan.slots["category"] != context.get("category"):
         # A new product type should not inherit an unrelated size/style.
         context = {k: v for k, v in context.items() if k not in ("size", "style", "occasion")}
+    # Literal customer attributes are authoritative.  Planner slots enrich
+    # them but may not overwrite an explicitly stated colour, size or type.
+    explicit_preferences = extract_explicit_preferences(payload.content)
     merged_context: dict = {
         **context,
         **(plan.slots if plan else {}),
+        **explicit_preferences,
         "language": turn_language,
         "response_language": turn_language,
     }
@@ -484,6 +494,24 @@ async def post_message(
                 reply_text = "Kaunsa product cart mein daalna hai? Uska naam bata dein."
             elif turn_language == "urdu":
                 reply_text = "کون سا پروڈکٹ کارٹ میں ڈالنا ہے؟ اس کا نام بتا دیں۔"
+        elif selected.status.value != "active" or selected.stock_qty < quantity:
+            # Resolve unavailable catalogue entries before cart mutation so
+            # the customer receives a truthful, useful sales response.
+            alternatives = await _keyword_catalog_search(
+                catalog_service, conversation.tenant_id, selected.title, top_k=_REPLY_PRODUCT_LIMIT
+            )
+            alternatives = [
+                product for product in alternatives
+                if product.id != selected.id and product.status.value == "active" and product.stock_qty > 0
+            ]
+            matched_product_ids = [str(product.id) for product in alternatives]
+            name = selected.title
+            if turn_language == "urdu":
+                reply_text = f"{name} اس وقت آؤٹ آف اسٹاک ہے۔ کیا میں ملتا جلتا دستیاب آپشن دکھاؤں؟"
+            elif turn_language == "roman_urdu":
+                reply_text = f"{name} abhi out of stock hai. Main similar available option dikha doon?"
+            else:
+                reply_text = f"{name} is currently out of stock. Would you like to see similar available options?"
         else:
             try:
                 cart = None

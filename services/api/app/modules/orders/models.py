@@ -51,6 +51,11 @@ class OrderModel(UUIDPKMixin, TenantScopedMixin, Base):
     currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="PKR")
     payment_method: Mapped[str] = mapped_column(String(20), nullable=False)
     payment_status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="pending")
+    customer_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    customer_phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    delivery_address: Mapped[str] = mapped_column(String(1000), nullable=False)
+    delivery_city: Mapped[str] = mapped_column(String(120), nullable=False)
+    order_notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     placed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

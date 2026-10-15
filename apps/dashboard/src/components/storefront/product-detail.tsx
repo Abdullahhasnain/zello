@@ -61,22 +61,14 @@ export function ProductDetail({ slug, productId }: { slug: string; productId: st
   }
 
   const outOfStock = product.status === "out_of_stock" || product.stockQty <= 0;
-  const images = product.images;
+  const images = product.images.length ? product.images : ["/zello-product-fallback.svg"];
 
   return (
     <div className="grid gap-8 lg:grid-cols-2">
       <div>
         <div className="aspect-square overflow-hidden rounded-card border border-border bg-surface-hover">
-          {images[activeImage] ? (
-            // eslint-disable-next-line @next/next/no-img-element -- tenant-supplied external URLs
-            <img src={images[activeImage]} alt={product.title} className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-ink-faint">
-              <svg viewBox="0 0 24 24" fill="none" className="h-14 w-14" stroke="currentColor" strokeWidth="1.5">
-                <path d="M4 4h16v16H4zM4 15l4-4 4 4 4-5 4 5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-          )}
+          {/* eslint-disable-next-line @next/next/no-img-element -- tenant-supplied external URLs */}
+          <img src={images[activeImage]} onError={(event) => { event.currentTarget.src = "/zello-product-fallback.svg"; }} alt={product.title} className="h-full w-full object-cover" />
         </div>
         {images.length > 1 ? (
           <div className="mt-3 flex gap-2 overflow-x-auto">

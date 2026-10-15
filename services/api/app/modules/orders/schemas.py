@@ -1,6 +1,9 @@
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
+import re
+
+from pydantic import field_validator
 
 from app.shared.schema import CamelModel
 
@@ -57,6 +60,11 @@ class OrderRead(CamelModel):
     payment_method: str
     payment_status: str
     placed_at: datetime
+    customer_name: str | None = None
+    customer_phone: str | None = None
+    delivery_address: str | None = None
+    delivery_city: str | None = None
+    order_notes: str | None = None
 
 
 class CheckoutRequest(CamelModel):
@@ -67,3 +75,24 @@ class CheckoutRequest(CamelModel):
 
     cart_id: UUID
     payment_method: str
+    customer_name: str
+    customer_phone: str
+    delivery_address: str
+    delivery_city: str
+    order_notes: str | None = None
+
+    @field_validator("customer_name", "delivery_address", "delivery_city")
+    @classmethod
+    def required_delivery_text(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 2:
+            raise ValueError("This field is required")
+        return value
+
+    @field_validator("customer_phone")
+    @classmethod
+    def pakistani_mobile(cls, value: str) -> str:
+        digits = re.sub(r"[\s-]", "", value)
+        if not re.fullmatch(r"(?:\+92|92|0)?3\d{9}", digits):
+            raise ValueError("Enter a valid Pakistani mobile number")
+        return digits

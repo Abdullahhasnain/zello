@@ -378,8 +378,11 @@ export class ZelloWidgetElement extends HTMLElement {
         this.messagesEl.appendChild(this.buildCartConfirmationCard(bubble.action));
       }
 
-      if (bubble.products && bubble.products.length > 0) {
-        const actionable = bubble === latestProducts && !this.isSending;
+      // Keep conversational text, but only render product cards for the
+      // latest recommendation. This avoids stale sneakers filling the panel
+      // after a shopper asks about a different category.
+      if (bubble.products && bubble.products.length > 0 && bubble === latestProducts) {
+        const actionable = !this.isSending;
         this.messagesEl.appendChild(buildProductRow(bubble.products, {
           onAdd: actionable ? (product) => this.beginCartAction(product) : undefined,
           pendingProductId: this.pendingCartProductId,
@@ -502,7 +505,7 @@ export class ZelloWidgetElement extends HTMLElement {
     if (show) {
       const indicator = document.createElement("div");
       indicator.className = "zello-typing";
-      indicator.innerHTML = "<span></span><span></span><span></span>";
+      indicator.innerHTML = "<span></span><span></span><span></span><em>Options check kar raha hoon…</em>";
       this.messagesEl.appendChild(indicator);
       this.scrollToBottom();
     }

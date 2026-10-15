@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { CartDetail } from "@zello-ai/types";
-import { checkout, formatPrice, getCart } from "@/lib/storefront/api";
+import { checkout, formatPrice, getCart, type CheckoutDetails } from "@/lib/storefront/api";
 import { emitCartChanged } from "./storefront-header";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -38,6 +38,22 @@ export function CheckoutForm({ slug }: { slug: string }) {
   const [cart, setCart] = useState<CartDetail | null | undefined>(undefined);
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [isPlacing, setIsPlacing] = useState(false);
+  const [details, setDetails] = useState<CheckoutDetails>({
+    customerName: "", customerPhone: "", deliveryAddress: "", deliveryCity: "", orderNotes: "",
+  });
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const errors = {
+    customerName: details.customerName.trim().length < 2 ? "Enter your full name." : "",
+    customerPhone: /^(?:\+92|92|0)?3\d{9}$/.test(details.customerPhone.replace(/[\s-]/g, "")) ? "" : "Enter a valid Pakistani mobile number.",
+    deliveryAddress: details.deliveryAddress.trim().length < 5 ? "Enter your complete delivery address." : "",
+    deliveryCity: details.deliveryCity.trim().length < 2 ? "Enter your city." : "",
+  };
+  const detailsValid = !Object.values(errors).some(Boolean);
+
+  function updateDetail<K extends keyof CheckoutDetails>(key: K, value: CheckoutDetails[K]) {
+    setDetails((current) => ({ ...current, [key]: value }));
+  }
 
   useEffect(() => {
     let active = true;
@@ -50,7 +66,10 @@ export function CheckoutForm({ slug }: { slug: string }) {
   }, [slug]);
 
   async function placeOrder() {
-    if (isPlacing || !cart) return;
+    if (isPlacing || !cart || !detailsValid) {
+      setTouched({ customerName: true, customerPhone: true, deliveryAddress: true, deliveryCity: true });
+      return;
+    }
     setIsPlacing(true);
     try {
       const latest = await getCart(slug);
@@ -60,7 +79,7 @@ export function CheckoutForm({ slug }: { slug: string }) {
         setIsPlacing(false);
         return;
       }
-      const order = await checkout(slug, paymentMethod);
+      const order = await checkout(slug, paymentMethod, details);
       emitCartChanged(0);
       router.replace(`/store/${slug}/order/${order.id}`);
     } catch (err) {
@@ -89,7 +108,26 @@ export function CheckoutForm({ slug }: { slug: string }) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
-      <div className="lg:col-span-2">
+      <div className="lg:col-span-2 space-y-6">
+        <section>
+          <h2 className="mb-3 font-display text-base font-semibold text-ink">Delivery details</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(["customerName", "customerPhone", "deliveryCity"] as const).map((field) => (
+              <label key={field} className={field === "customerName" ? "sm:col-span-2" : ""}>
+                <span className="mb-1 block text-sm font-medium text-ink">{field === "customerName" ? "Full name" : field === "customerPhone" ? "Pakistani mobile number" : "City"}</span>
+                <input value={details[field]} onChange={(event) => updateDetail(field, event.target.value)} onBlur={() => setTouched((current) => ({ ...current, [field]: true }))} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink" placeholder={field === "customerPhone" ? "03XX XXXXXXX" : undefined} />
+                {touched[field] && errors[field] ? <span className="mt-1 block text-xs text-danger">{errors[field]}</span> : null}
+              </label>
+            ))}
+            <label className="sm:col-span-2">
+              <span className="mb-1 block text-sm font-medium text-ink">Complete delivery address</span>
+              <textarea value={details.deliveryAddress} onChange={(event) => updateDetail("deliveryAddress", event.target.value)} onBlur={() => setTouched((current) => ({ ...current, deliveryAddress: true }))} className="min-h-20 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink" />
+              {touched.deliveryAddress && errors.deliveryAddress ? <span className="mt-1 block text-xs text-danger">{errors.deliveryAddress}</span> : null}
+            </label>
+            <label className="sm:col-span-2"><span className="mb-1 block text-sm font-medium text-ink">Order notes <span className="text-ink-faint">(optional)</span></span><textarea value={details.orderNotes} onChange={(event) => updateDetail("orderNotes", event.target.value)} className="min-h-16 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink" /></label>
+          </div>
+        </section>
+        <section>
         <h2 className="mb-3 font-display text-base font-semibold text-ink">Payment method</h2>
         <div className="space-y-2">
           {PAYMENT_METHODS.map((method) => (
@@ -115,6 +153,7 @@ export function CheckoutForm({ slug }: { slug: string }) {
             </label>
           ))}
         </div>
+        </section>
       </div>
 
       <div className="h-fit rounded-card border border-border bg-surface p-5 shadow-card">
@@ -138,7 +177,7 @@ export function CheckoutForm({ slug }: { slug: string }) {
           <span className="font-medium text-ink">Total</span>
           <span className="font-display text-lg font-semibold text-ink">{formatPrice(cart.subtotal)}</span>
         </div>
-        <Button onClick={placeOrder} isLoading={isPlacing} className="mt-5 w-full">
+        <Button onClick={placeOrder} isLoading={isPlacing} disabled={!detailsValid} className="mt-5 w-full">
           Place order
         </Button>
         <p className="mt-2 text-center text-xs text-ink-faint">Cash on delivery — no payment taken now.</p>

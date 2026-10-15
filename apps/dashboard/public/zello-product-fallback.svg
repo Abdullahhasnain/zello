@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480" role="img" aria-label="Zello AI product placeholder">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#1b2544"/><stop offset="1" stop-color="#5137b8"/></linearGradient></defs>
+  <rect width="480" height="480" fill="url(#g)"/><circle cx="240" cy="205" r="86" fill="#fff" fill-opacity=".12"/><path d="M160 274c25-52 54-78 80-78s55 26 80 78" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="18" stroke-linecap="round"/><text x="240" y="380" fill="#fff" fill-opacity=".9" font-family="Arial,sans-serif" font-size="32" font-weight="700" text-anchor="middle">Zello AI</text>
+</svg>

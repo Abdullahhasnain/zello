@@ -132,6 +132,11 @@ async def checkout(
         auth.tenant_id,
         payload.cart_id,
         payment_method=PaymentProvider(payload.payment_method),
+        customer_name=payload.customer_name,
+        customer_phone=payload.customer_phone,
+        delivery_address=payload.delivery_address,
+        delivery_city=payload.delivery_city,
+        order_notes=payload.order_notes,
     )
     return OrderRead.model_validate(order)
 

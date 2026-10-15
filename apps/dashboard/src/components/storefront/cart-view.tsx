@@ -90,10 +90,8 @@ export function CartView({ slug }: { slug: string }) {
             className="flex items-center gap-4 rounded-card border border-border bg-surface p-3 shadow-card"
           >
             <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-surface-hover">
-              {item.productImageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- tenant-supplied external URLs
-                <img src={item.productImageUrl} alt="" className="h-full w-full object-cover" />
-              ) : null}
+              {/* eslint-disable-next-line @next/next/no-img-element -- tenant-supplied external URLs */}
+              <img src={item.productImageUrl || "/zello-product-fallback.svg"} onError={(event) => { event.currentTarget.src = "/zello-product-fallback.svg"; }} alt="" className="h-full w-full object-cover" />
             </div>
             <div className="min-w-0 flex-1">
               <Link
