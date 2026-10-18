@@ -44,6 +44,13 @@ faker = "^30.3.0"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+# Vercel's FastAPI runtime needs the ASGI import path because this service
+# keeps the application inside the existing `app/` package instead of a
+# root-level `app.py`.  This is deployment metadata only; the API entrypoint
+# and routing architecture remain unchanged.
+[tool.vercel]
+entrypoint = "app.main:app"
+
 [tool.ruff]
 line-length = 110
 target-version = "py312"
