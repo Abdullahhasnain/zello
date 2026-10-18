@@ -4,6 +4,8 @@ services:
     runtime: docker
     plan: free
     region: singapore
+    branch: main
+    autoDeployTrigger: commit
     dockerfilePath: ./services/api/Dockerfile
     dockerContext: .
     healthCheckPath: /health
@@ -22,9 +24,11 @@ services:
         value: "3"
       - key: REDIS_URL
         sync: false
-      - key: CLERK_JWKS_URL
+      - key: AUTH_PROVIDER
+        value: auth0
+      - key: AUTH0_DOMAIN
         sync: false
-      - key: CLERK_ISSUER
+      - key: AUTH0_AUDIENCE
         sync: false
       - key: INTERNAL_SERVICE_TOKEN
         sync: false
@@ -45,7 +49,11 @@ services:
       - key: AI_ASSISTANT_ENABLED
         value: "true"
       - key: VOICE_ENABLED
-        value: "false"
+        value: "true"
+      - key: VOICE_TTS_PROVIDER
+        value: edge
+      - key: VOICE_EDGE_TTS_VOICE
+        value: en-US-AvaMultilingualNeural
       - key: CORS_ALLOWED_ORIGINS
         sync: false
 
@@ -54,6 +62,8 @@ services:
     runtime: docker
     plan: free
     region: singapore
+    branch: main
+    autoDeployTrigger: commit
     dockerfilePath: ./apps/dashboard/Dockerfile
     dockerContext: .
     envVars:
@@ -61,11 +71,19 @@ services:
         sync: false
       - key: NEXT_PUBLIC_APP_URL
         sync: false
-      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+      - key: APP_BASE_URL
         sync: false
-      - key: CLERK_SECRET_KEY
+      - key: AUTH_PROVIDER
+        value: auth0
+      - key: AUTH0_DOMAIN
         sync: false
-      - key: CLERK_WEBHOOK_SECRET
+      - key: AUTH0_CLIENT_ID
+        sync: false
+      - key: AUTH0_CLIENT_SECRET
+        sync: false
+      - key: AUTH0_SECRET
+        generateValue: true
+      - key: AUTH0_AUDIENCE
         sync: false
       - key: INTERNAL_SERVICE_TOKEN
         sync: false
@@ -83,6 +101,8 @@ services:
     runtime: docker
     plan: free
     region: singapore
+    branch: main
+    autoDeployTrigger: commit
     dockerfilePath: ./apps/admin/Dockerfile
     dockerContext: .
     envVars:
@@ -90,9 +110,19 @@ services:
         sync: false
       - key: NEXT_PUBLIC_APP_URL
         sync: false
-      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+      - key: APP_BASE_URL
         sync: false
-      - key: CLERK_SECRET_KEY
+      - key: AUTH_PROVIDER
+        value: auth0
+      - key: AUTH0_DOMAIN
+        sync: false
+      - key: AUTH0_CLIENT_ID
+        sync: false
+      - key: AUTH0_CLIENT_SECRET
+        sync: false
+      - key: AUTH0_SECRET
+        generateValue: true
+      - key: AUTH0_AUDIENCE
         sync: false
       - key: NEXT_PUBLIC_CLERK_SIGN_IN_URL
         value: /sign-in
