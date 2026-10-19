@@ -25,11 +25,6 @@ def _cart_to_entity(model: CartModel) -> Cart:
         tenant_id=model.tenant_id,
         status=CartStatus(model.status),
         conversation_id=model.conversation_id,
-        customer_name=model.customer_name,
-        customer_phone=model.customer_phone,
-        delivery_address=model.delivery_address,
-        delivery_city=model.delivery_city,
-        order_notes=model.order_notes,
         customer_id=model.customer_id,
     )
 
