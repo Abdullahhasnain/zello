@@ -5,10 +5,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.analytics.repository import AnalyticsEventRepository
 from app.modules.analytics.service import AnalyticsService
-from app.shared.deps import get_tenant_db_session
+from app.shared.deps import get_customer_tenant_db_session, get_tenant_db_session
 
 
 def get_analytics_service(
     session: Annotated[AsyncSession, Depends(get_tenant_db_session)],
 ) -> AnalyticsService:
+    return AnalyticsService(AnalyticsEventRepository(session))
+
+
+def get_analytics_service_for_customer(
+    session: Annotated[AsyncSession, Depends(get_customer_tenant_db_session)],
+) -> AnalyticsService:
+    """Tenant-scoped analytics writer for guest storefront/widget flows."""
     return AnalyticsService(AnalyticsEventRepository(session))

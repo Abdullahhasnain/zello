@@ -15,7 +15,7 @@ from app.domain.entities.product import Product
 from app.modules.ai.dependencies import get_ai_orchestrator
 from app.modules.ai.orchestrator import AIOrchestrator
 from app.modules.ai.prompts import format_known_preferences
-from app.modules.analytics.dependencies import get_analytics_service
+from app.modules.analytics.dependencies import get_analytics_service_for_customer
 from app.modules.analytics.service import AnalyticsService
 from app.modules.catalog.dependencies import get_catalog_service_for_customer
 from app.modules.catalog.service import CatalogService
@@ -312,7 +312,7 @@ async def start_conversation(
     auth: Annotated[AuthContext, Depends(get_current_customer_auth)],
     conversation_service: Annotated[ConversationService, Depends(get_conversation_service_for_customer)],
     tenant_service: Annotated[TenantService, Depends(get_tenant_service_for_customer)],
-    analytics_service: Annotated[AnalyticsService, Depends(get_analytics_service)],
+    analytics_service: Annotated[AnalyticsService, Depends(get_analytics_service_for_customer)],
     channel: ConversationChannel = ConversationChannel.WIDGET,
     language: str = "roman_urdu",
 ) -> ConversationStartResponse:
@@ -357,7 +357,7 @@ async def post_message(
     tenant_service: Annotated[TenantService, Depends(get_tenant_service_for_customer)],
     ai_orchestrator: Annotated[AIOrchestrator, Depends(get_ai_orchestrator)],
     order_service: Annotated[OrderService, Depends(get_order_service_for_customer)],
-    analytics_service: Annotated[AnalyticsService, Depends(get_analytics_service)],
+    analytics_service: Annotated[AnalyticsService, Depends(get_analytics_service_for_customer)],
 ) -> MessageExchangeRead:
     """Handles a turn like a salesperson, in two phases (see
     app/modules/ai/orchestrator.py):
