@@ -250,6 +250,32 @@ async def _load_recent_products(
     return products
 
 
+async def _resolve_named_catalog_product(
+    catalog_service: CatalogService,
+    tenant_id: UUID,
+    text: str,
+) -> Product | None:
+    """Resolve an explicitly spoken catalogue title, including unavailable items.
+
+    Cart intent normally operates on recently grounded cards, but a shopper may
+    paste or speak an exact product name directly.  Resolve only an unambiguous
+    title containment match so this cannot silently turn a vague request into
+    a cart mutation for an unrelated item.
+    """
+    normalized_text = " ".join(re.findall(r"[\w]+", text.casefold()))
+    matches: list[Product] = []
+    list_products = getattr(catalog_service, "list_products", None)
+    if not callable(list_products):
+        # Lightweight service doubles and older adapters may only implement
+        # get_product; the recent-card resolver remains the safe fallback.
+        return None
+    for product in await list_products(tenant_id, limit=100):
+        normalized_title = " ".join(re.findall(r"[\w]+", product.title.casefold()))
+        if normalized_title and normalized_title in normalized_text:
+            matches.append(product)
+    return matches[0] if len(matches) == 1 else None
+
+
 async def _in_stock_alternatives(
     catalog_service: CatalogService,
     tenant_id: UUID,
@@ -527,7 +553,10 @@ async def post_message(
     cart_action: ConversationActionRead | dict | None = None
     is_cart = cart_requested
     if is_cart:
-        selected = _select_cart_product(
+        named_product = await _resolve_named_catalog_product(
+            catalog_service, conversation.tenant_id, payload.content
+        )
+        selected = named_product or _select_cart_product(
             recent_products,
             payload.content,
             plan.product_id if plan and plan.action == "add_to_cart" else None,
