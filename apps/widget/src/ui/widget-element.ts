@@ -190,6 +190,13 @@ export class ZelloWidgetElement extends HTMLElement {
     this.sendButton.className = "zello-send-button";
     this.sendButton.setAttribute("aria-label", "Send message");
     this.sendButton.innerHTML = SEND_ICON;
+    // Some host storefronts intercept native form-button clicks across the
+    // widget's shadow boundary. Route the pointer path back through the same
+    // form submit event used by Enter; handleSend's guard prevents duplicates.
+    this.sendButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      row.requestSubmit();
+    });
 
     row.appendChild(this.inputEl);
     row.appendChild(this.sendButton);
