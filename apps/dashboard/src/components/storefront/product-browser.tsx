@@ -15,43 +15,40 @@ export function ProductBrowser({ slug }: { slug: string }) {
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestVersion = useRef(0);
 
   useEffect(() => {
-    let cancelled = false;
-    setProducts(null);
+    const version = ++requestVersion.current;
+    const searchQuery = query.trim();
     setError(null);
-    listProducts(slug, categoryId || undefined)
-      .then((items) => {
-        if (!cancelled) setProducts(items);
-      })
-      .catch((err: Error) => {
-        if (!cancelled) setError(err.message);
-      });
-    return () => {
-      cancelled = true;
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+
+    const load = () => {
+      const request = searchQuery
+        ? searchProducts(slug, searchQuery)
+        : listProducts(slug, categoryId || undefined);
+      request
+        .then((items) => {
+          if (requestVersion.current === version) setProducts(items);
+        })
+        .catch((err: Error) => {
+          if (requestVersion.current === version) setError(err.message);
+        });
     };
-  }, [slug, categoryId]);
+
+    if (searchQuery) searchTimer.current = setTimeout(load, 350);
+    else load();
+
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    };
+  }, [slug, categoryId, query]);
 
   useEffect(() => {
     listCategories(slug)
       .then(setCategories)
       .catch(() => undefined);
   }, [slug]);
-
-  // Debounced search — semantic when the backend supports it, local
-  // filter fallback otherwise (handled inside searchProducts).
-  useEffect(() => {
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    if (!query.trim()) return;
-    searchTimer.current = setTimeout(() => {
-      searchProducts(slug, query.trim())
-        .then(setProducts)
-        .catch((err: Error) => setError(err.message));
-    }, 350);
-    return () => {
-      if (searchTimer.current) clearTimeout(searchTimer.current);
-    };
-  }, [slug, query]);
 
   const visible = useMemo(() => products ?? [], [products]);
 
