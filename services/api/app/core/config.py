@@ -117,6 +117,7 @@ class Settings(BaseSettings):
     CORS_ALLOWED_ORIGINS: list[str] = [
         "http://localhost:3000",
         "http://localhost:3001",
+        "https://thriving-kitten-113650.netlify.app",
     ]
 
     # --- Rate limiting ---
