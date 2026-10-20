@@ -214,6 +214,15 @@ export function buildStyles(primaryColor: string): string {
       cursor: default;
     }
     .zello-send-button svg { width: 18px; height: 18px; }
+    .zello-send-loading {
+      width: 16px;
+      height: 16px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      animation: zello-send-spin .7s linear infinite;
+    }
+    @keyframes zello-send-spin { to { transform: rotate(360deg); } }
 
     .zello-hidden {
       display: none !important;

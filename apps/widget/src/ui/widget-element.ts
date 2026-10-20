@@ -171,27 +171,25 @@ export class ZelloWidgetElement extends HTMLElement {
     return header;
   }
 
-  private buildInputRow(): HTMLDivElement {
-    const row = document.createElement("div");
+  private buildInputRow(): HTMLFormElement {
+    const row = document.createElement("form");
     row.className = "zello-input-row";
+    row.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void this.handleSend();
+    });
 
     this.inputEl = document.createElement("input");
     this.inputEl.className = "zello-input";
     this.inputEl.type = "text";
     this.inputEl.placeholder = "Kya chahiye? Budget, colour aur size batayein…";
     this.inputEl.setAttribute("aria-label", "Message Zello");
-    this.inputEl.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        void this.handleSend();
-      }
-    });
 
     this.sendButton = document.createElement("button");
+    this.sendButton.type = "submit";
     this.sendButton.className = "zello-send-button";
     this.sendButton.setAttribute("aria-label", "Send message");
     this.sendButton.innerHTML = SEND_ICON;
-    this.sendButton.addEventListener("click", () => void this.handleSend());
 
     row.appendChild(this.inputEl);
     row.appendChild(this.sendButton);
@@ -261,7 +259,7 @@ export class ZelloWidgetElement extends HTMLElement {
 
     this.isSending = true;
     this.inputEl.value = "";
-    this.sendButton.disabled = true;
+    this.setSendingState(true);
 
     const optimisticId = uid();
     this.messages.push({
@@ -308,10 +306,19 @@ export class ZelloWidgetElement extends HTMLElement {
       console.error("[zello-widget] send message failed", error);
     } finally {
       this.isSending = false;
-      this.sendButton.disabled = false;
+      this.setSendingState(false);
       this.renderTypingIndicator(false);
       this.renderMessages();
     }
+  }
+
+  private setSendingState(sending: boolean): void {
+    this.sendButton.disabled = sending;
+    this.sendButton.setAttribute("aria-busy", String(sending));
+    this.sendButton.setAttribute("aria-label", sending ? "Sending message" : "Send message");
+    this.sendButton.innerHTML = sending
+      ? '<span class="zello-send-loading" aria-hidden="true"></span>'
+      : SEND_ICON;
   }
 
   /** Fetches the real catalog record for each product the assistant's
@@ -364,7 +371,7 @@ export class ZelloWidgetElement extends HTMLElement {
 
   private renderMessages(): void {
     this.messagesEl.innerHTML = "";
-    const latestProducts = [...this.messages].reverse().find((message) => message.products?.length);
+    const latestAssistant = [...this.messages].reverse().find((message) => message.role === "assistant");
     for (const bubble of this.messages) {
       const el = document.createElement("div");
       el.className = `zello-bubble zello-bubble-${bubble.role === "customer" ? "customer" : "assistant"}`;
@@ -381,7 +388,7 @@ export class ZelloWidgetElement extends HTMLElement {
       // Keep conversational text, but only render product cards for the
       // latest recommendation. This avoids stale sneakers filling the panel
       // after a shopper asks about a different category.
-      if (bubble.products && bubble.products.length > 0 && bubble === latestProducts) {
+      if (bubble.products && bubble.products.length > 0 && bubble === latestAssistant) {
         const actionable = !this.isSending;
         this.messagesEl.appendChild(buildProductRow(bubble.products, {
           onAdd: actionable ? (product) => this.beginCartAction(product) : undefined,

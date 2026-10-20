@@ -87,14 +87,24 @@ export class ApiClient {
     conversationId: string,
     content: string,
   ): Promise<MessageExchangeResponse> {
-    const result = await this.request<MessageExchangeResponse>(
-      `/conversations/${conversationId}/messages`,
-      {
-        method: "POST",
-        body: JSON.stringify({ content, requestId: crypto.randomUUID(),
-          cartId: window.localStorage.getItem(`zello.storefront.cart.${this.tenantSlug}`) }),
-      },
-    );
+    const requestId = crypto.randomUUID();
+    const body = JSON.stringify({
+      content,
+      requestId,
+      cartId: window.localStorage.getItem(`zello.storefront.cart.${this.tenantSlug}`),
+    });
+    let result: MessageExchangeResponse;
+    try {
+      result = await this.readMessageStream(conversationId, body);
+    } catch {
+      // Safe during rolling deploys and transient stream interruptions: the
+      // same requestId makes the backend replay the persisted turn instead
+      // of duplicating a message or cart mutation.
+      result = await this.request<MessageExchangeResponse>(
+        `/conversations/${conversationId}/messages`,
+        { method: "POST", body },
+      );
+    }
     const intent = result.assistantMessage.intent;
     // The typed action is emitted only after the backend's add_item call
     // succeeds. Keep the legacy intent check as a compatibility fallback for
@@ -117,6 +127,39 @@ export class ApiClient {
       }));
     }
     return result;
+  }
+
+  private async readMessageStream(
+    conversationId: string,
+    body: string,
+  ): Promise<MessageExchangeResponse> {
+    const response = await this.requestResponse(
+      `/conversations/${conversationId}/messages/stream`,
+      { method: "POST", body },
+    );
+    if (!response.body) throw new Error("Streaming response body is unavailable");
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffered = "";
+    let completed: MessageExchangeResponse | null = null;
+    const consume = (line: string) => {
+      if (!line.trim()) return;
+      const event = JSON.parse(line) as { type?: string; data?: MessageExchangeResponse };
+      if (event.type === "complete" && event.data) completed = event.data;
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      buffered += decoder.decode(value, { stream: !done });
+      const lines = buffered.split("\n");
+      buffered = lines.pop() ?? "";
+      for (const line of lines) consume(line);
+      if (done) break;
+    }
+    consume(buffered);
+    if (!completed) throw new Error("Stream ended before the assistant reply completed");
+    return completed;
   }
 
   /** Same tenant-scoped, RLS-isolated read the storefront pages use (see

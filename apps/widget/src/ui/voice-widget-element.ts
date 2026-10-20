@@ -828,6 +828,7 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
       ? "Unmute voice replies"
       : "Mute voice replies";
     this.muteButton.setAttribute("aria-label", label);
+    this.muteButton.setAttribute("aria-pressed", String(this.voicePrefs.muted));
     this.muteButton.title = label;
   }
 
@@ -856,6 +857,7 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
       ? "Turn voice off"
       : "Turn voice on";
     this.voiceToggleButton.setAttribute("aria-label", label);
+    this.voiceToggleButton.setAttribute("aria-pressed", String(this.voicePrefs.voiceEnabled));
     this.voiceToggleButton.title = label;
   }
 

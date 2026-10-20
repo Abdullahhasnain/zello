@@ -108,26 +108,65 @@ export function listCategories(slug: string): Promise<Category[]> {
 }
 
 export async function searchProducts(slug: string, query: string): Promise<Product[]> {
-  try {
-    const results = await storefrontFetch<Product[]>(slug, "/search/products", {
-      method: "POST",
-      body: JSON.stringify({ query, topK: 24 }),
-    });
-    if (results.length > 0) return results;
-  } catch {
-    // Semantic search needs the embeddings backend (OpenAI key) — fall
-    // through to the plain-text match below.
+  // Storefront filtering is deliberately lexical and exhaustive. Semantic
+  // retrieval is useful inside the sales conversation, but a search box must
+  // never render a white product for the literal query "black" merely because
+  // its embedding is nearby. Attributes include imported colour/category and
+  // searchable tags from Shopify/WooCommerce catalogues.
+  const [all, categories] = await Promise.all([listProducts(slug), listCategories(slug)]);
+  const categoryNames = new Map(categories.map((category) => [category.id, category.name]));
+  const tokens = searchTokens(query);
+  if (tokens.length === 0) return all;
+
+  return all.filter((product) => {
+    const searchable = normalizeSearchText([
+      product.title,
+      product.description ?? "",
+      product.categoryId ? categoryNames.get(product.categoryId) ?? "" : "",
+      flattenSearchValues(product.attributes),
+    ].join(" "));
+    return tokens.every((token) => searchable.includes(token));
+  });
+}
+
+const SEARCH_ALIASES: Record<string, string> = {
+  kala: "black", kaala: "black", kale: "black", kaale: "black", kali: "black",
+  safed: "white", bhura: "brown", neela: "blue",
+  joota: "shoes", jootay: "shoes", juta: "shoes", jute: "shoes",
+  sneaker: "shoes", sneakers: "shoes", footwear: "shoes",
+  tshirt: "shirt", "t-shirt": "shirt", shirts: "shirt",
+};
+
+const SEARCH_STOP_WORDS = new Set([
+  "mujhe", "mein", "main", "koi", "ka", "ki", "ke", "hai", "hain",
+  "chahiye", "dikhao", "dikhayein", "show", "me", "please", "products",
+]);
+
+function normalizeSearchText(value: string): string {
+  return value
+    .toLocaleLowerCase("en-PK")
+    .replace(/[_/]+/g, " ")
+    .replace(/[^\p{L}\p{N}-]+/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => SEARCH_ALIASES[token] ?? token)
+    .join(" ");
+}
+
+function searchTokens(query: string): string[] {
+  return [...new Set(normalizeSearchText(query).split(" "))]
+    .filter((token) => token.length > 1 && !SEARCH_STOP_WORDS.has(token));
+}
+
+function flattenSearchValues(value: unknown): string {
+  if (value == null) return "";
+  if (Array.isArray(value)) return value.map(flattenSearchValues).join(" ");
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .flatMap(([key, nested]) => [key, flattenSearchValues(nested)])
+      .join(" ");
   }
-  // Fallback: plain title/description match. Covers both a missing
-  // embeddings backend and products that haven't been embedded yet, so the
-  // storefront search box always works.
-  const all = await listProducts(slug);
-  const needle = query.toLowerCase();
-  return all.filter(
-    (p) =>
-      p.title.toLowerCase().includes(needle) ||
-      (p.description ?? "").toLowerCase().includes(needle),
-  );
+  return String(value);
 }
 
 // --- Cart ---

@@ -5,6 +5,7 @@ while replacing infrastructure dependencies at the app boundary. It neither
 connects to Postgres/Redis nor calls a real LLM or Edge TTS service.
 """
 
+import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -27,7 +28,7 @@ from app.domain.entities.conversation import (
 from app.domain.entities.product import Product, ProductStatus
 from app.modules.ai.dependencies import get_ai_orchestrator
 from app.modules.ai.orchestrator import AIOrchestrator
-from app.modules.analytics.dependencies import get_analytics_service
+from app.modules.analytics.dependencies import get_analytics_service_for_customer
 from app.modules.catalog.dependencies import get_catalog_service_for_customer
 from app.modules.conversations.dependencies import get_conversation_service_for_customer
 from app.modules.orders.dependencies import get_order_service_for_customer
@@ -223,7 +224,7 @@ def smoke_app(monkeypatch: pytest.MonkeyPatch) -> tuple[FastAPI, Conversation, P
         get_tenant_service_for_customer: lambda: tenant,
         get_ai_orchestrator: lambda: orchestrator,
         get_order_service_for_customer: lambda: orders,
-        get_analytics_service: lambda: analytics,
+        get_analytics_service_for_customer: lambda: analytics,
         get_voice_service: lambda: voice,
     }
     yield app, conversation, product_a, product_b
@@ -248,11 +249,14 @@ async def test_rufus_voice_commerce_smoke(
         assert ".00000" not in decimal_text
 
         comparison_response = await client.post(
-            f"/api/v1/conversations/{conversation.id}/messages",
+            f"/api/v1/conversations/{conversation.id}/messages/stream",
             json={"content": "compare Product A and Product B"},
         )
-        assert comparison_response.status_code == 201
-        comparison = comparison_response.json()["assistantMessage"]
+        assert comparison_response.status_code == 200
+        assert comparison_response.headers["content-type"].startswith("application/x-ndjson")
+        events = [json.loads(line) for line in comparison_response.text.splitlines()]
+        assert events[0] == {"type": "started"}
+        comparison = events[-1]["data"]["assistantMessage"]
         assert comparison["intent"]["matched_product_ids"] == [str(product_a.id), str(product_b.id)]
         assert "comparison" in comparison["content"].lower()
 

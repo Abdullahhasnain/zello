@@ -1,10 +1,12 @@
 import asyncio
+import json
 import re
 import time
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 
 from app.core.logging import get_logger
 from app.core.middleware.rate_limit import enforce_conversation_rate_limit
@@ -25,8 +27,8 @@ from app.modules.conversations.dependencies import (
 )
 from app.modules.conversations.language import response_language
 from app.modules.conversations.product_matching import (
-    extract_explicit_preferences,
     extract_comparison_terms,
+    extract_explicit_preferences,
     is_comparison_intent,
     match_comparison_products,
     matches_preferences,
@@ -248,6 +250,55 @@ async def _load_recent_products(
     return products
 
 
+async def _in_stock_alternatives(
+    catalog_service: CatalogService,
+    tenant_id: UUID,
+    selected: Product,
+    *,
+    limit: int = 3,
+) -> list[Product]:
+    """Return genuinely similar, purchasable alternatives for an unavailable item.
+
+    Category/brand and shared descriptive terms are deterministic catalogue
+    facts, so this does not depend on an embedding provider and cannot revive
+    a stale unrelated card from the previous turn.
+    """
+    ignored = {"demo", "size", "product", "black", "white", "brown", "navy"}
+
+    def terms(product: Product) -> set[str]:
+        raw = " ".join(
+            [product.title, product.description or "", *map(str, product.attributes.values())]
+        ).casefold()
+        return {
+            token for token in re.findall(r"[\w]+", raw)
+            if len(token) > 2 and not token.isdigit() and token not in ignored
+        }
+
+    selected_terms = terms(selected)
+    candidates = await catalog_service.list_products(tenant_id, limit=100)
+    scored: list[tuple[int, Product]] = []
+    selected_category = str(selected.attributes.get("category", "")).casefold()
+    for product in candidates:
+        if (
+            product.id == selected.id
+            or product.status.value != "active"
+            or product.stock_qty <= 0
+        ):
+            continue
+        score = len(selected_terms & terms(product)) * 2
+        if selected.category_id and product.category_id == selected.category_id:
+            score += 10
+        if selected.brand_id and product.brand_id == selected.brand_id:
+            score += 3
+        product_category = str(product.attributes.get("category", "")).casefold()
+        if selected_category and product_category == selected_category:
+            score += 8
+        if score > 0:
+            scored.append((score, product))
+    scored.sort(key=lambda item: (-item[0], item[1].price, item[1].title.casefold()))
+    return [product for _, product in scored[:limit]]
+
+
 async def _find_alternatives(
     search_service: SearchService,
     tenant_id: UUID,
@@ -434,7 +485,10 @@ async def post_message(
     recent_products = await _load_recent_products(
         catalog_service, conversation.tenant_id, context.get("last_matched_product_ids")
     )
-    plan = await ai_orchestrator.plan_turn(
+    # Cart mutations are deterministic and already protected by the explicit
+    # intent gate plus recent grounded product IDs. Skipping an unnecessary
+    # LLM planning round-trip keeps this path comfortably below one second.
+    plan = None if cart_requested else await ai_orchestrator.plan_turn(
         store_name=tenant.name,
         language=turn_language,
         known_preferences=format_known_preferences(context),
@@ -497,21 +551,27 @@ async def post_message(
         elif selected.status.value != "active" or selected.stock_qty < quantity:
             # Resolve unavailable catalogue entries before cart mutation so
             # the customer receives a truthful, useful sales response.
-            alternatives = await _keyword_catalog_search(
-                catalog_service, conversation.tenant_id, selected.title, top_k=_REPLY_PRODUCT_LIMIT
+            alternatives = await _in_stock_alternatives(
+                catalog_service, conversation.tenant_id, selected, limit=3
             )
-            alternatives = [
-                product for product in alternatives
-                if product.id != selected.id and product.status.value == "active" and product.stock_qty > 0
-            ]
             matched_product_ids = [str(product.id) for product in alternatives]
             name = selected.title
             if turn_language == "urdu":
-                reply_text = f"{name} اس وقت آؤٹ آف اسٹاک ہے۔ کیا میں ملتا جلتا دستیاب آپشن دکھاؤں؟"
+                reply_text = f"{name} اس وقت آؤٹ آف اسٹاک ہے، اس لیے کارٹ میں شامل نہیں ہو سکتا۔"
             elif turn_language == "roman_urdu":
-                reply_text = f"{name} abhi out of stock hai. Main similar available option dikha doon?"
+                reply_text = (
+                    f"{name}: Yeh product filhaal out of stock hai, is liye cart mein add nahi ho sakta."
+                )
             else:
-                reply_text = f"{name} is currently out of stock. Would you like to see similar available options?"
+                reply_text = f"{name} is currently out of stock, so it cannot be added to the cart."
+            if alternatives:
+                alternative_names = ", ".join(product.title for product in alternatives)
+                if turn_language == "urdu":
+                    reply_text += f" یہ دستیاب متبادل دیکھیں: {alternative_names}۔"
+                elif turn_language == "roman_urdu":
+                    reply_text += f" Yeh similar in-stock options dekhein: {alternative_names}."
+                else:
+                    reply_text += f" Similar in-stock alternatives: {alternative_names}."
         else:
             try:
                 cart = None
@@ -730,6 +790,55 @@ async def post_message(
         customer_message=ConversationMessageRead.model_validate(customer_message),
         assistant_message=ConversationMessageRead.model_validate(assistant_message),
         action=cart_action,
+    )
+
+
+@router.post(
+    "/{conversation_id}/messages/stream",
+    summary="Send a message with an immediate streamed progress event",
+)
+async def post_message_stream(
+    conversation_id: UUID,
+    payload: PostMessageRequest,
+    auth: Annotated[AuthContext, Depends(get_current_customer_auth)],
+    conversation_service: Annotated[ConversationService, Depends(get_conversation_service_for_customer)],
+    search_service: Annotated[SearchService, Depends(get_search_service_for_customer)],
+    catalog_service: Annotated[CatalogService, Depends(get_catalog_service_for_customer)],
+    tenant_service: Annotated[TenantService, Depends(get_tenant_service_for_customer)],
+    ai_orchestrator: Annotated[AIOrchestrator, Depends(get_ai_orchestrator)],
+    order_service: Annotated[OrderService, Depends(get_order_service_for_customer)],
+    analytics_service: Annotated[AnalyticsService, Depends(get_analytics_service_for_customer)],
+) -> StreamingResponse:
+    """NDJSON transport that flushes acknowledgement before AI/catalog work.
+
+    The completed payload is exactly ``MessageExchangeRead`` so existing
+    response contracts and persistence stay unchanged. The widget can render
+    a reliable processing state immediately instead of appearing frozen.
+    """
+
+    async def events():
+        yield json.dumps({"type": "started"}) + "\n"
+        result = await post_message(
+            conversation_id,
+            payload,
+            auth,
+            conversation_service,
+            search_service,
+            catalog_service,
+            tenant_service,
+            ai_orchestrator,
+            order_service,
+            analytics_service,
+        )
+        yield json.dumps({
+            "type": "complete",
+            "data": result.model_dump(mode="json", by_alias=True),
+        }) + "\n"
+
+    return StreamingResponse(
+        events(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
     )
 
 
