@@ -78,6 +78,7 @@ _MAX_CLARIFICATIONS = 2
 _SEARCH_TIMEOUT_SECONDS = 5.0
 
 _FOLLOW_UP_REFERENCE = re.compile(
+    r"\b(?:this|that|ye|yeh|is)\s+product\b|"
     r"\b(this|that|these|those|it|one|ones|ye|yeh|woh|wo|wala|wali|walay|"
     r"available|cheaper|sasta|sasti|options|compare|recommend|یہ|وہ|والا|سستا)\b",
     re.IGNORECASE,
@@ -502,7 +503,7 @@ async def post_message(
     comparison_requested = is_comparison_intent(payload.content)
     cart_requested = is_cart_request(payload.content)
     references_recent_products = _references_recent_products(payload.content) and bool(
-        context.get("last_matched_product_ids")
+        context.get("last_matched_product_ids") or payload.current_product_id
     )
     references_recent_products = references_recent_products or (
         comparison_requested and bool(context.get("last_matched_product_ids"))
@@ -511,6 +512,18 @@ async def post_message(
     recent_products = await _load_recent_products(
         catalog_service, conversation.tenant_id, context.get("last_matched_product_ids")
     )
+    page_context_product: Product | None = None
+    if references_recent_products and payload.current_product_id:
+        try:
+            page_context_product = await catalog_service.get_product(
+                conversation.tenant_id, payload.current_product_id
+            )
+            recent_products = [
+                page_context_product,
+                *[product for product in recent_products if product.id != page_context_product.id],
+            ]
+        except Exception:  # noqa: BLE001 - stale/foreign page context is ignored safely
+            pass
     # Cart mutations are deterministic and already protected by the explicit
     # intent gate plus recent grounded product IDs. Skipping an unnecessary
     # LLM planning round-trip keeps this path comfortably below one second.
@@ -723,6 +736,13 @@ async def post_message(
         # real (over-budget) options as honest alternatives ("nothing under
         # X, but we do have these from Y").
         found = [p for p in found if matches_preferences(p, merged_context)]
+        positioned_product = None
+        if (
+            references_recent_products
+            and not comparison_requested
+            and _PRODUCT_POSITION.search(payload.content)
+        ):
+            positioned_product = _select_cart_product(found, payload.content, None)
         if references_recent_products and _is_cheaper_request(payload.content):
             recommended_id = context.get("last_recommended_product_id")
             recommended = next((p for p in recent_products if str(p.id) == str(recommended_id)), None)
@@ -731,7 +751,13 @@ async def post_message(
                 if cheaper:
                     found = sorted(cheaper, key=lambda product: product.price)
         budget = _extract_budget(merged_context.get("budget"))
-        if len(comparison_products) == 2:
+        if page_context_product is not None and not comparison_requested:
+            matched_products = [page_context_product]
+            exact_match = True
+        elif positioned_product is not None:
+            matched_products = [positioned_product]
+            exact_match = True
+        elif len(comparison_products) == 2:
             matched_products = comparison_products
             exact_match = True
         elif budget is None:

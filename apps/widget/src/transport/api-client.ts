@@ -88,10 +88,12 @@ export class ApiClient {
     content: string,
   ): Promise<MessageExchangeResponse> {
     const requestId = crypto.randomUUID();
+    const productPathMatch = window.location.pathname.match(/\/product\/([^/]+)/);
     const body = JSON.stringify({
       content,
       requestId,
       cartId: window.localStorage.getItem(`zello.storefront.cart.${this.tenantSlug}`),
+      currentProductId: productPathMatch?.[1],
     });
     let result: MessageExchangeResponse;
     try {

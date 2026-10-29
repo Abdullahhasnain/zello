@@ -36,6 +36,9 @@ class PostMessageRequest(CamelModel):
     content: str = Field(min_length=1, max_length=4000)
     cart_id: UUID | None = None
     request_id: UUID | None = None
+    # Additive storefront context. It lets a shopper say "is product" on a
+    # product-detail page without changing conversation or catalogue schemas.
+    current_product_id: UUID | None = None
 
 
 class AddToCartActionPayload(CamelModel):

@@ -260,6 +260,30 @@ async def test_rufus_voice_commerce_smoke(
         assert comparison["intent"]["matched_product_ids"] == [str(product_a.id), str(product_b.id)]
         assert "comparison" in comparison["content"].lower()
 
+        # A product-detail page supplies its current real catalogue ID so
+        # deictic questions such as "is product" remain grounded.
+        conversation.context.clear()
+        detail_response = await client.post(
+            f"/api/v1/conversations/{conversation.id}/messages",
+            json={"content": "is product ka price kya hai?", "currentProductId": str(product_b.id)},
+        )
+        assert detail_response.status_code == 201
+        assert detail_response.json()["assistantMessage"]["intent"]["matched_product_ids"] == [
+            str(product_b.id)
+        ]
+
+        # Positional follow-ups must select exactly the card the shopper
+        # referenced instead of repeating the entire previous result list.
+        conversation.context["last_matched_product_ids"] = [str(product_a.id), str(product_b.id)]
+        second_response = await client.post(
+            f"/api/v1/conversations/{conversation.id}/messages",
+            json={"content": "second wala kaisa hai?"},
+        )
+        assert second_response.status_code == 201
+        assert second_response.json()["assistantMessage"]["intent"]["matched_product_ids"] == [
+            str(product_b.id)
+        ]
+
         # A single grounded recent product makes "yeh" unambiguous.
         conversation.context["last_matched_product_ids"] = [str(product_a.id)]
         cart_response = await client.post(
