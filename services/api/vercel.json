@@ -1,4 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "python -m pip install -r requirements.txt"
+  "installCommand": "python -m pip install -r requirements.txt",
+  "buildCommand": "python -m alembic upgrade head"
 }
