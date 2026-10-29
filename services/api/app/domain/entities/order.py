@@ -71,6 +71,11 @@ class Order:
     cart_id: UUID | None = None
     customer_id: UUID | None = None
     conversation_id: UUID | None = None
+    customer_name: str = ""
+    customer_phone: str = ""
+    delivery_address: str = ""
+    delivery_city: str = ""
+    order_notes: str | None = None
     placed_at: datetime | None = None
 
 

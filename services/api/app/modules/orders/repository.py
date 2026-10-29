@@ -51,6 +51,11 @@ def _order_to_entity(model: OrderModel) -> Order:
         cart_id=model.cart_id,
         customer_id=model.customer_id,
         conversation_id=model.conversation_id,
+        customer_name=model.customer_name,
+        customer_phone=model.customer_phone,
+        delivery_address=model.delivery_address,
+        delivery_city=model.delivery_city,
+        order_notes=model.order_notes,
         placed_at=model.placed_at,
     )
 

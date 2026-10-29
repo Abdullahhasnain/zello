@@ -47,8 +47,22 @@ def setup_shop():
 
 async def test_checkout_reduces_stock_and_cannot_run_twice():
     service, cart, _, product, orders = setup_shop()
-    order = await service.checkout(cart.tenant_id, cart.id, PaymentProvider.COD)
+    order = await service.checkout(
+        cart.tenant_id,
+        cart.id,
+        PaymentProvider.COD,
+        customer_name="Zello QA Test",
+        customer_phone="03001234567",
+        delivery_address="QA test address",
+        delivery_city="Karachi",
+        order_notes="Demo only",
+    )
     assert order.total_amount == Decimal("2490")
+    assert order.customer_name == "Zello QA Test"
+    assert order.customer_phone == "03001234567"
+    assert order.delivery_address == "QA test address"
+    assert order.delivery_city == "Karachi"
+    assert order.order_notes == "Demo only"
     assert product.stock_qty == 2
     assert cart.status == CartStatus.CONVERTED
     with pytest.raises(ValidationError):
