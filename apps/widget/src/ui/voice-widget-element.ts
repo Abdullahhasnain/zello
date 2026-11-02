@@ -668,13 +668,21 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
       await this.sendVoiceMessage(transcript);
     } catch (error) {
       if (error instanceof ApiError && error.status === 503) {
-        this.serverTranscriptionUnavailable = true;
+        // A 503 can be a short free-tier Gemini rate limit or provider
+        // hiccup. Do not permanently route the rest of this page session to
+        // Chrome Web Speech: its remote service is exactly what commonly
+        // reports the misleading `network` error. Keep server STT selected
+        // so the next tap retries the working authenticated path.
+        this.serverTranscriptionUnavailable = false;
+        this.setVoiceState(
+          "error",
+          "Voice service is temporarily busy. Please wait a few seconds and tap the mic again.",
+        );
+        return;
       }
       this.setVoiceState(
         "error",
-        isSpeechRecognitionSupported()
-          ? "Server transcription is unavailable. Tap the mic to retry with browser speech."
-          : "Voice transcription is temporarily unavailable. Please type your message.",
+        "Voice transcription is temporarily unavailable. Please try again or type your message.",
       );
     }
   }
