@@ -632,6 +632,18 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
           this.setVoiceState("idle");
           return;
         }
+        if (code === "network" && ServerVoiceRecorder.isSupported()) {
+          // Chrome's Web Speech service is remote and can fail even while
+          // the storefront itself is online. Do not trap the customer on
+          // that broken fallback: the next mic tap retries our authenticated
+          // server recorder, which uses Gemini STT in production.
+          this.serverTranscriptionUnavailable = false;
+          this.setVoiceState(
+            "error",
+            "Browser voice service lost connection. Tap the mic to retry.",
+          );
+          return;
+        }
         this.setVoiceState("error", this.describeVoiceError(code, message));
       },
       onEnd: () => {
