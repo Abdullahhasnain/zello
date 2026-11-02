@@ -4,6 +4,7 @@ import {
   recognitionLocaleFor,
   synthesisLocaleFor,
 } from "../voice/language-map";
+import { LocalWhisperTranscriber } from "../voice/local-whisper";
 import { ServerVoiceRecorder } from "../voice/server-recorder";
 import { ServerVoiceSpeaker } from "../voice/server-speaker";
 import {
@@ -107,6 +108,7 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
   private readonly speaker = new VoiceSpeaker();
   private readonly serverSpeaker = new ServerVoiceSpeaker();
   private readonly serverRecorder = new ServerVoiceRecorder(this.serverSpeaker);
+  private readonly localTranscriber = new LocalWhisperTranscriber();
   private readonly voiceSupported: boolean;
   private serverTranscriptionUnavailable = false;
   private serverSpeechUnavailable = false;
@@ -588,6 +590,11 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
     }
     this.setVoiceState("listening");
     if (canUseServerRecorder) {
+      // Start downloading/initializing the quota-free local model while the
+      // customer is speaking, so its one-time setup overlaps recording.
+      if (LocalWhisperTranscriber.isSupported()) {
+        void this.localTranscriber.prepare().catch(() => undefined);
+      }
       void this.serverRecorder.start({
         onAudio: (audio) => {
           this.setVoiceState("processing");
@@ -655,7 +662,37 @@ export class ZelloVoiceWidgetElement extends ZelloWidgetElement {
   }
 
   private async transcribeAndSend(audio: Blob): Promise<void> {
+    if (LocalWhisperTranscriber.isSupported()) {
+      try {
+        this.voiceStatusEl.textContent =
+          "Transcribing on this device… first use may take a moment.";
+        // Never hold up the conversation while the model downloads for the
+        // first time. Its initialization continues in the background and the
+        // existing server path handles this turn after the deadline.
+        const localTranscript = (
+          await Promise.race([
+            this.localTranscriber.transcribe(audio),
+            new Promise<never>((_, reject) => {
+              window.setTimeout(
+                () => reject(new Error("Local transcription timed out.")),
+                12_000,
+              );
+            }),
+          ])
+        ).trim();
+        if (localTranscript) {
+          this.inputEl.value = localTranscript;
+          await this.sendVoiceMessage(localTranscript);
+          return;
+        }
+      } catch {
+        // CDN/model/WebAssembly failures are non-fatal. Continue through the
+        // existing authenticated server STT path without exposing internals.
+      }
+    }
+
     try {
+      this.voiceStatusEl.textContent = "Transcribing securely…";
       const transcript = (await this.apiClient.transcribeAudio(audio)).trim();
       if (!transcript) {
         this.setVoiceState(
