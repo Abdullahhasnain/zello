@@ -1,6 +1,8 @@
+from types import SimpleNamespace
+
 import pytest
 
-from app.modules.voice.provider import VoiceProvider
+from app.modules.voice.provider import GeminiVoiceProvider, VoiceProvider, VoiceProviderError
 from app.modules.voice.service import VoiceService
 from app.shared.exceptions import ValidationError
 
@@ -17,6 +19,19 @@ class FakeVoiceProvider(VoiceProvider):
     async def synthesize(self, text: str, *, instructions: str) -> bytes:
         self.synthesis_call = (text, instructions)
         return b"mp3-audio"
+
+
+class FakeGeminiModels:
+    def __init__(self, *, text: str = "mujhe black shoes chahiye", error: Exception | None = None) -> None:
+        self.text = text
+        self.error = error
+        self.call: dict | None = None
+
+    async def generate_content(self, **kwargs: object) -> SimpleNamespace:
+        self.call = kwargs
+        if self.error:
+            raise self.error
+        return SimpleNamespace(text=self.text)
 
 
 async def test_transcription_accepts_browser_webm_with_codec_parameter() -> None:
@@ -47,3 +62,30 @@ async def test_roman_urdu_speech_uses_code_switching_instructions() -> None:
     assert audio == b"mp3-audio"
     assert provider.synthesis_call is not None
     assert "Urdu-English code switching" in provider.synthesis_call[1]
+
+
+async def test_gemini_transcription_accepts_browser_audio_and_returns_only_text() -> None:
+    models = FakeGeminiModels(text='"mujhe black shoes chahiye"')
+    provider = GeminiVoiceProvider.__new__(GeminiVoiceProvider)
+    provider._client = SimpleNamespace(aio=SimpleNamespace(models=models))
+    provider._model = "gemini-2.5-flash"
+
+    text = await provider.transcribe(
+        b"webm-audio",
+        filename="voice-turn.webm",
+        content_type="audio/webm",
+    )
+
+    assert text == "mujhe black shoes chahiye"
+    assert models.call is not None
+    assert models.call["model"] == "gemini-2.5-flash"
+
+
+async def test_gemini_transcription_hides_provider_failures() -> None:
+    models = FakeGeminiModels(error=RuntimeError("sensitive provider detail"))
+    provider = GeminiVoiceProvider.__new__(GeminiVoiceProvider)
+    provider._client = SimpleNamespace(aio=SimpleNamespace(models=models))
+    provider._model = "gemini-2.5-flash"
+
+    with pytest.raises(VoiceProviderError, match="temporarily unavailable"):
+        await provider.transcribe(b"audio", filename="voice.webm", content_type="audio/webm")

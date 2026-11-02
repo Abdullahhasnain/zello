@@ -104,6 +104,11 @@ class Settings(BaseSettings):
     # Keep OpenAI selectable for deployments that explicitly need it.
     VOICE_TTS_PROVIDER: str = "edge"
     VOICE_EDGE_TTS_VOICE: str = "en-US-AvaMultilingualNeural"
+    # Gemini accepts the browser's recorded WebM/Opus audio directly and is
+    # used as the free server-side STT fallback when no paid OpenAI key is
+    # configured. Keeping this separate allows voice transcription models to
+    # change without affecting the sales-agent chat model.
+    VOICE_GEMINI_STT_MODEL: str = "gemini-2.5-flash"
     VOICE_STT_MODEL: str = "gpt-4o-mini-transcribe"
     VOICE_TTS_MODEL: str = "gpt-4o-mini-tts"
     VOICE_TTS_VOICE: str = "marin"

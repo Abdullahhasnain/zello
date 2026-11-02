@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 
 import edge_tts
-from edge_tts.exceptions import EdgeTTSException
 import httpx
+from edge_tts.exceptions import EdgeTTSException
 
 
 class VoiceProviderError(Exception):
@@ -99,6 +99,74 @@ class OpenAIVoiceProvider(VoiceProvider):
         if not audio:
             raise VoiceProviderError("The speech provider returned empty audio.")
         return audio
+
+
+class GeminiVoiceProvider(VoiceProvider):
+    """Gemini audio understanding used as keyless-to-the-browser server STT.
+
+    The API key stays server-side. The widget sends the same short audio blob
+    it already records, so this avoids Chrome's remote Web Speech service and
+    its frequent ``network`` failures without changing the public endpoint.
+    """
+
+    def __init__(self, *, api_key: str, model: str, timeout_seconds: float) -> None:
+        from google import genai
+
+        self._client = genai.Client(
+            api_key=api_key,
+            http_options={"timeout": int(timeout_seconds * 1000)},
+        )
+        self._model = model
+
+    async def transcribe(self, audio: bytes, *, filename: str, content_type: str) -> str:
+        del filename
+        from google.genai import types
+
+        prompt = (
+            "Transcribe this Pakistani ecommerce customer audio exactly. Return only the transcript, "
+            "with no commentary or quotation marks. The speaker may naturally mix Urdu, Roman Urdu, "
+            "and English. Write spoken Urdu in readable Roman Urdu (Latin script), while preserving "
+            "English product names, brands, colours, sizes, numbers, rupee prices, and city names."
+        )
+        try:
+            response = await self._client.aio.models.generate_content(
+                model=self._model,
+                contents=[
+                    types.Content(
+                        role="user",
+                        parts=[
+                            types.Part.from_text(text=prompt),
+                            types.Part.from_bytes(data=audio, mime_type=content_type),
+                        ],
+                    )
+                ],
+                config=types.GenerateContentConfig(
+                    temperature=0,
+                    max_output_tokens=200,
+                    thinking_config=(
+                        types.ThinkingConfig(thinking_budget=0)
+                        if self._model == "gemini-2.5-flash"
+                        else None
+                    ),
+                ),
+            )
+        except Exception as exc:
+            # The SDK exposes several transport/provider exception classes
+            # across minor releases. Collapse them at this provider boundary
+            # so no credential, response body, or vendor detail leaks to the
+            # customer-facing endpoint.
+            raise VoiceProviderError("Speech transcription is temporarily unavailable.") from exc
+
+        text = (response.text or "").strip().strip('"')
+        if not text:
+            raise VoiceProviderError("No speech could be transcribed from the audio.")
+        return text
+
+    async def synthesize(
+        self, text: str, *, instructions: str, voice: str | None = None
+    ) -> bytes:
+        del text, instructions, voice
+        raise VoiceProviderError("Gemini speech synthesis is not configured.")
 
 
 class EdgeTTSVoiceProvider(VoiceProvider):

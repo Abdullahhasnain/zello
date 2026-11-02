@@ -3,7 +3,12 @@ from typing import Annotated
 from fastapi import Depends
 
 from app.core.config import Settings, get_settings
-from app.modules.voice.provider import EdgeTTSVoiceProvider, OpenAIVoiceProvider, VoiceProvider
+from app.modules.voice.provider import (
+    EdgeTTSVoiceProvider,
+    GeminiVoiceProvider,
+    OpenAIVoiceProvider,
+    VoiceProvider,
+)
 from app.modules.voice.service import VoiceService
 from app.shared.exceptions import AppError
 
@@ -33,11 +38,20 @@ def get_voice_service(settings: Annotated[Settings, Depends(get_settings)]) -> V
             timeout_seconds=settings.VOICE_REQUEST_TIMEOUT_SECONDS,
         )
 
+    transcription_provider = openai_provider
+    if transcription_provider is None and settings.GEMINI_API_KEY:
+        transcription_provider = GeminiVoiceProvider(
+            api_key=settings.GEMINI_API_KEY,
+            model=settings.VOICE_GEMINI_STT_MODEL,
+            timeout_seconds=settings.VOICE_REQUEST_TIMEOUT_SECONDS,
+        )
+
     if settings.VOICE_TTS_PROVIDER.lower() == "edge":
-        # Keep OpenAI STT when configured; otherwise `/transcriptions` returns
-        # the existing 503 and the widget falls back to browser speech input.
+        # Prefer paid OpenAI STT when explicitly configured, otherwise reuse
+        # the existing Gemini credential for free server transcription.
+        # Browser SpeechRecognition remains the final emergency fallback.
         return VoiceService(
-            openai_provider or edge_provider,
+            transcription_provider or edge_provider,
             tts_provider=edge_provider,
             max_audio_bytes=settings.VOICE_MAX_AUDIO_BYTES,
         )
